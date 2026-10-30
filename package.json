@@ -1,0 +1,21 @@
+{
+  "name": "test",
+  "version": "1.0.0",
+  "description": "Modular Fastify API",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "dev": "nodemon --exec \"node --env-file=.env\" server.js",
+    "test": "node --env-file=.env --test"
+  },
+  "dependencies": {
+    "@fastify/jwt": "^10.2.2",
+    "bcryptjs": "^3.0.3",
+    "fastify": "^5.12.5",
+    "mongoose": "^9.10.2",
+    "nodemon": "^3.1.14"
+  }
+}
