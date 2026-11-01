@@ -27,3 +27,10 @@ export async function requireSeller(request) {
     throw new HttpError(403, "Seller access is required");
   }
 }
+
+export async function requireDeliveryPartner(request) {
+  await requireAuthenticated(request);
+  if (request.user.role !== "delivery_partner") {
+    throw new HttpError(403, "Delivery partner access is required");
+  }
+}

@@ -10,7 +10,6 @@ import {
   createCouponSchema,
   updateCouponSchema,
   userCouponListSchema,
-  validateCouponSchema,
 } from "./coupon.schema.js";
 
 export default async function couponRoutes(app, services) {
@@ -58,13 +57,5 @@ export default async function couponRoutes(app, services) {
     "/coupons",
     { ...customerOnly, schema: { querystring: userCouponListSchema } },
     controller.listForUser,
-  );
-  app.post(
-    "/coupons/:coupon_id/validate",
-    {
-      ...customerOnly,
-      schema: { params: couponParamsSchema, body: validateCouponSchema },
-    },
-    controller.validate,
   );
 }

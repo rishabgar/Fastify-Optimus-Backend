@@ -3,6 +3,9 @@ import authModule from "./src/modules/auth/index.js";
 import cartModule from "./src/modules/cart/index.js";
 import couponModule from "./src/modules/coupon/index.js";
 import healthModule from "./src/modules/health/index.js";
+import orderModule from "./src/modules/order/index.js";
+import paymentModule from "./src/modules/payment/index.js";
+import rewardModule from "./src/modules/reward/index.js";
 import productCategoryModule from "./src/modules/product-category/index.js";
 import productModule from "./src/modules/product/index.js";
 import sellerProductModule from "./src/modules/seller-product/index.js";
@@ -73,6 +76,19 @@ export function buildApp(options = {}) {
     prefix: "/cart",
     jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET,
     cartService: options.cartService,
+  });
+  app.register(rewardModule);
+  app.register(orderModule, {
+    prefix: "/orders",
+    jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET,
+    orderService: options.orderService,
+    rewardService: options.rewardService,
+  });
+  app.register(paymentModule, {
+    prefix: "/payments",
+    jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET,
+    paymentService: options.paymentService,
+    cashfreeClient: options.cashfreeClient,
   });
   app.register(authModule, {
     prefix: "/auth",

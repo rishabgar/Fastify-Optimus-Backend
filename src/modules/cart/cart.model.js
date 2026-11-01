@@ -13,19 +13,21 @@ export const cartModel = schemaFactory(
       {
         _id: false,
 
-        product_id: {
+        seller_product_id: {
           type: Types.ObjectId,
+          ref: "seller_product",
           required: true,
         },
 
         shop_id: {
           type: Types.ObjectId,
+          ref: "shop",
           required: true,
         },
 
         product_category_id: {
           type: Types.ObjectId,
-          required: true,
+          default: null,
         },
 
         variant_id: {
@@ -37,6 +39,7 @@ export const cartModel = schemaFactory(
           type: Number,
           required: true,
           min: 1,
+          max: 20,
           default: 1,
         },
       },

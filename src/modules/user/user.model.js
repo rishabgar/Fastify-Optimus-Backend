@@ -94,6 +94,14 @@ export const userModel = schemaFactory(
 
     saved_addresses: [
       {
+        recipient_name: {
+          type: String,
+          trim: true,
+        },
+        phone: {
+          type: String,
+          trim: true,
+        },
         address: {
           type: String,
           required: true,

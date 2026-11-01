@@ -18,7 +18,7 @@ function cartData(quantity = 1) {
     user_id: ids.user,
     items: [
       {
-        product_id: ids.product,
+        seller_product_id: ids.product,
         shop_id: ids.shop,
         product_category_id: ids.category,
         variant_id: ids.variant,
@@ -65,7 +65,7 @@ test("POST /cart adds an item", async (t) => {
     url: "/cart",
     headers: { authorization: `Bearer ${token}` },
     payload: {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 2,
     },
@@ -108,7 +108,7 @@ test("PATCH /cart updates an item", async (t) => {
     url: "/cart",
     headers: { authorization: `Bearer ${token}` },
     payload: {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 3,
     },
@@ -147,7 +147,7 @@ test("PATCH /cart requires authentication and strips controlled fields", async (
     method: "PATCH",
     url: "/cart",
     payload: {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 2,
     },
@@ -159,7 +159,7 @@ test("PATCH /cart requires authentication and strips controlled fields", async (
     headers: { authorization: `Bearer ${token}` },
     payload: {
       user_id: ids.user,
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 2,
     },
@@ -173,7 +173,7 @@ test("DELETE /cart removes a scoped item", async (t) => {
   const cartService = {
     async removeItem(userId, identity) {
       assert.equal(userId, ids.user);
-      assert.equal(identity.product_id, ids.product);
+      assert.equal(identity.seller_product_id, ids.product);
       assert.equal(identity.shop_id, ids.shop);
       assert.equal(identity.product_category_id, ids.category);
       return { ...cartData(), items: [] };
@@ -185,7 +185,7 @@ test("DELETE /cart removes a scoped item", async (t) => {
   const response = await app.inject({
     method: "DELETE",
     url:
-      `/cart/product_id/${ids.product}/shop_id/${ids.shop}` +
+      `/cart/seller_product_id/${ids.product}/shop_id/${ids.shop}` +
       `/product_category_id/${ids.category}?user_id=${ids.user}`,
   });
 
@@ -205,7 +205,7 @@ test("DELETE /cart succeeds when the cart item does not exist", async (t) => {
   const response = await app.inject({
     method: "DELETE",
     url:
-      `/cart/product_id/${ids.product}/shop_id/${ids.shop}` +
+      `/cart/seller_product_id/${ids.product}/shop_id/${ids.shop}` +
       `/product_category_id/${ids.category}?user_id=${ids.user}`,
   });
 
@@ -223,7 +223,7 @@ test("GET /cart returns grouped items for the authenticated customer", async (t)
       shop_id: ids.shop,
       items: [
         {
-          product_id: ids.product,
+          seller_product_id: ids.product,
           variant_id: ids.variant,
           variant_sku: "SKU-1",
           variant_label: "1 kg",

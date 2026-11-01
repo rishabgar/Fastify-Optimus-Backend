@@ -7,7 +7,7 @@ import shopModel from "../shop/shop.model.js";
 const CART_FIELDS = [
   "_id",
   "user_id",
-  "items.product_id",
+  "items.seller_product_id",
   "items.shop_id",
   "items.product_category_id",
   "items.variant_id",
@@ -15,10 +15,10 @@ const CART_FIELDS = [
 ].join(" ");
 
 export const cartRepository = {
-  async findSellableItem(productId, variantId) {
+  async findSellableItem(sellerProductId, variantId) {
     const sellerProduct = await sellerProductModel
       .findOne({
-        _id: productId,
+        _id: sellerProductId,
         is_active: true,
         is_deleted: false,
         variants: {
@@ -73,7 +73,7 @@ export const cartRepository = {
     if (!shop || !productCategoryId || !masterVariantIsActive) return null;
 
     return {
-      product_id: sellerProduct._id,
+      seller_product_id: sellerProduct._id,
       shop_id: sellerProduct.shop_id,
       product_category_id: productCategoryId,
       variant_id: sellerProduct.variants[0]._id,
@@ -92,7 +92,7 @@ export const cartRepository = {
       {
         $lookup: {
           from: sellerProductModel.collection.name,
-          localField: "items.product_id",
+          localField: "items.seller_product_id",
           foreignField: "_id",
           as: "seller_product",
         },
@@ -211,7 +211,7 @@ export const cartRepository = {
           shop_id: { $toString: "$seller_product.shop_id" },
           item_order: 1,
           item: {
-            product_id: { $toString: "$seller_product._id" },
+            seller_product_id: { $toString: "$seller_product._id" },
             variant_id: { $toString: "$seller_variant._id" },
             variant_sku: "$seller_variant.seller_sku",
             variant_label: {
@@ -298,7 +298,7 @@ export const cartRepository = {
           user_id: userId,
           items: {
             $elemMatch: {
-              product_id: identity.product_id,
+              seller_product_id: identity.seller_product_id,
               shop_id: identity.shop_id,
               product_category_id: identity.product_category_id,
               variant_id: identity.variant_id,
@@ -322,7 +322,7 @@ export const cartRepository = {
         {
           $pull: {
             items: {
-              product_id: identity.product_id,
+              seller_product_id: identity.seller_product_id,
               shop_id: identity.shop_id,
               product_category_id: identity.product_category_id,
             },

@@ -59,24 +59,6 @@ test("seller updates are ownership scoped and field whitelisted", async () => {
   assert.equal(Object.hasOwn(result, "updatedAt"), false);
 });
 
-test("shop deletion is blocked by active orders", async () => {
-  const service = createShopService({
-    repository: {
-      async findOwned() {
-        return { _id: shopId };
-      },
-      async hasBlockingOrders() {
-        return { _id: "order" };
-      },
-    },
-  });
-
-  await assert.rejects(
-    service.remove(shopId, sellerId),
-    (error) => error.statusCode === 409,
-  );
-});
-
 test("shop detail enforces ownership and exposes only seller detail fields", async () => {
   const service = createShopService({
     repository: {

@@ -91,9 +91,3 @@ export const userCouponListSchema = {
   },
 };
 
-export const validateCouponSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["subtotal"],
-  properties: { subtotal: { type: "number", minimum: 0 } },
-};

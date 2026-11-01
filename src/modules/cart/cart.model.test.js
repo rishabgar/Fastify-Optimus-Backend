@@ -8,7 +8,7 @@ test("cart model validates items and applies defaults", async () => {
     user_id: new Types.ObjectId(),
     items: [
       {
-        product_id: new Types.ObjectId(),
+        seller_product_id: new Types.ObjectId(),
         shop_id: new Types.ObjectId(),
         product_category_id: new Types.ObjectId(),
         variant_id: new Types.ObjectId(),

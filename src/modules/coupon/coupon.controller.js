@@ -68,16 +68,5 @@ export function createCouponController({ campaignService, redemptionService }) {
       });
     },
 
-    async validate(request, reply) {
-      const result = await redemptionService.validateForCheckout(
-        request.user.user_id,
-        request.params.coupon_id,
-        request.body.subtotal,
-      );
-      return success(reply, {
-        message: "Coupon is valid",
-        data: result,
-      });
-    },
   };
 }

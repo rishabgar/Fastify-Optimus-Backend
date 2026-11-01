@@ -87,15 +87,15 @@ export const couponRepository = {
       .lean();
   },
 
-  startSession() {
-    return mongoose.startSession();
-  },
-
   findUserCoupon(userId, couponId, session) {
     return userCouponModel
       .findOne({ user_id: userId, coupon_id: couponId })
       .session(session ?? null)
       .lean();
+  },
+
+  startSession() {
+    return mongoose.startSession();
   },
 
   incrementAssignmentIfAvailable(couponId, now, session) {
@@ -182,13 +182,4 @@ export const couponRepository = {
     ]);
   },
 
-  transitionUserCoupon(filter, updates, session) {
-    return userCouponModel
-      .findOneAndUpdate(filter, updates, {
-        returnDocument: "after",
-        runValidators: true,
-        session,
-      })
-      .lean();
-  },
 };

@@ -34,7 +34,7 @@ test("cart item aggregation resolves products and groups them by shop", async (t
   const itemProjection = pipeline.find(
     (stage) => stage.$project?.item,
   ).$project.item;
-  assert.equal(itemProjection.product_id.$toString, "$seller_product._id");
+  assert.equal(itemProjection.seller_product_id.$toString, "$seller_product._id");
   assert.equal(itemProjection.variant_id.$toString, "$seller_variant._id");
   assert.equal(itemProjection.variant_sku, "$seller_variant.seller_sku");
   assert.equal(itemProjection.product_price, "$seller_variant.price");

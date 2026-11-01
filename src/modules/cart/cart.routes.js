@@ -40,7 +40,7 @@ export default async function cartRoutes(app, { cartService }) {
   );
 
   app.delete(
-    "/product_id/:product_id/shop_id/:shop_id/product_category_id/:product_category_id",
+    "/seller_product_id/:seller_product_id/shop_id/:shop_id/product_category_id/:product_category_id",
     {
       schema: {
         params: removeCartItemParamsSchema,

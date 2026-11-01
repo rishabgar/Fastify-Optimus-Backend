@@ -4,7 +4,7 @@ const objectIdSchema = {
 };
 
 const itemIdentityProperties = {
-  product_id: objectIdSchema,
+  seller_product_id: objectIdSchema,
   shop_id: objectIdSchema,
   product_category_id: objectIdSchema,
   variant_id: objectIdSchema,
@@ -13,9 +13,9 @@ const itemIdentityProperties = {
 export const addCartItemSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["product_id", "variant_id"],
+  required: ["seller_product_id", "variant_id"],
   properties: {
-    product_id: objectIdSchema,
+    seller_product_id: objectIdSchema,
     variant_id: objectIdSchema,
     quantity: { type: "integer", minimum: 1, default: 1 },
   },
@@ -24,9 +24,9 @@ export const addCartItemSchema = {
 export const updateCartItemSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["product_id", "variant_id", "quantity"],
+  required: ["seller_product_id", "variant_id", "quantity"],
   properties: {
-    product_id: objectIdSchema,
+    seller_product_id: objectIdSchema,
     variant_id: objectIdSchema,
     quantity: { type: "integer", minimum: 1 },
   },
@@ -35,9 +35,9 @@ export const updateCartItemSchema = {
 export const removeCartItemParamsSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["product_id", "shop_id", "product_category_id"],
+  required: ["seller_product_id", "shop_id", "product_category_id"],
   properties: {
-    product_id: objectIdSchema,
+    seller_product_id: objectIdSchema,
     shop_id: objectIdSchema,
     product_category_id: objectIdSchema,
   },
@@ -65,7 +65,7 @@ const cartDataSchema = {
         type: "object",
         additionalProperties: false,
         required: [
-          "product_id",
+          "seller_product_id",
           "shop_id",
           "product_category_id",
           "variant_id",
@@ -105,7 +105,7 @@ const cartProductSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "product_id",
+    "seller_product_id",
     "variant_id",
     "variant_sku",
     "variant_label",
@@ -116,7 +116,7 @@ const cartProductSchema = {
     "quantity",
   ],
   properties: {
-    product_id: objectIdSchema,
+    seller_product_id: objectIdSchema,
     variant_id: objectIdSchema,
     variant_sku: { type: "string" },
     variant_label: { type: "string" },

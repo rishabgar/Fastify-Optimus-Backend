@@ -1,7 +1,5 @@
-import mongoose from "mongoose";
 import shopTypeModel from "../shop-type/shop-type.model.js";
 import shopModel from "./shop.model.js";
-import { SHOP_BLOCKING_ORDER_STATUSES } from "./shop.constants.js";
 
 const SELLER_FIELDS = [
   "_id",
@@ -144,13 +142,6 @@ export const shopRepository = {
       )
       .select(SELLER_FIELDS)
       .lean();
-  },
-
-  hasBlockingOrders(shopId) {
-    return mongoose.connection.collection("orders").findOne({
-      shop_id: new mongoose.Types.ObjectId(shopId),
-      status: { $in: SHOP_BLOCKING_ORDER_STATUSES },
-    });
   },
 
   async listCustomer({ match, sort, skip, limit }) {

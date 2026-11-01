@@ -154,13 +154,6 @@ export function createShopService({
 
     async remove(shopId, sellerId) {
       await verifyOwnership(shopId, sellerId);
-      if (await repository.hasBlockingOrders(shopId)) {
-        throw new HttpError(
-          409,
-          "Shop cannot be deleted while it has active orders",
-          { field: "shop_id" },
-        );
-      }
       const shop = await repository.softDeleteOwned(shopId, sellerId);
       if (!shop) throw notFoundError();
       return shop;

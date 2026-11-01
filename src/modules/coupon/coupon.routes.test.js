@@ -68,29 +68,3 @@ test("admin can create a validated coupon campaign", async (t) => {
   assert.equal(received.code, "SAVE10");
 });
 
-test("coupon validation derives the user from authentication", async (t) => {
-  let receivedUserId;
-  const app = buildTestApp({
-    role: "customer",
-    redemptionService: {
-      async validateForCheckout(actorId, id, subtotal) {
-        receivedUserId = actorId;
-        assert.equal(id, couponId);
-        assert.equal(subtotal, 500);
-        return { coupon_id: id, discount: 50 };
-      },
-    },
-  });
-  t.after(() => app.close());
-  const token = await tokenFor(app);
-
-  const response = await app.inject({
-    method: "POST",
-    url: `/coupons/${couponId}/validate`,
-    headers: { authorization: `Bearer ${token}` },
-    payload: { subtotal: 500, user_id: "64b000000000000000000009" },
-  });
-
-  assert.equal(response.statusCode, 200);
-  assert.equal(receivedUserId, userId);
-});

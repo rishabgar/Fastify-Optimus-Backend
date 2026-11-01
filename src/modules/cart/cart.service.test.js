@@ -14,7 +14,7 @@ const ids = {
 
 function item(variantId = ids.variant, quantity = 1) {
   return {
-    product_id: ids.product,
+    seller_product_id: ids.product,
     shop_id: ids.shop,
     product_category_id: ids.category,
     variant_id: variantId,
@@ -44,7 +44,7 @@ test("cart service creates a cart for the first item", async () => {
   });
 
   const result = await service.addItem(ids.user, {
-    product_id: ids.product,
+    seller_product_id: ids.product,
     variant_id: ids.variant,
   });
 
@@ -56,7 +56,7 @@ test("cart service treats a duplicate item as a successful no-op", async () => {
   const existingCart = cart([
     {
       ...item(),
-      product_id: new Types.ObjectId(ids.product),
+      seller_product_id: new Types.ObjectId(ids.product),
       shop_id: new Types.ObjectId(ids.shop),
       product_category_id: new Types.ObjectId(ids.category),
       variant_id: new Types.ObjectId(ids.variant),
@@ -78,7 +78,7 @@ test("cart service treats a duplicate item as a successful no-op", async () => {
   });
 
   const result = await service.addItem(ids.user, {
-    product_id: ids.product,
+    seller_product_id: ids.product,
     variant_id: ids.variant,
   });
 
@@ -98,7 +98,7 @@ test("cart service rejects an unavailable product variant", async () => {
 
   await assert.rejects(
     service.addItem(ids.user, {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
     }),
     { statusCode: 404, message: "Product variant is unavailable" },
@@ -116,7 +116,7 @@ test("cart service rejects quantity above available stock", async () => {
 
   await assert.rejects(
     service.addItem(ids.user, {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 3,
     }),
@@ -142,7 +142,7 @@ test("cart service updates an item's quantity", async () => {
   });
 
   const result = await service.updateItem(ids.user, {
-    product_id: ids.product,
+    seller_product_id: ids.product,
     variant_id: ids.variant,
     quantity: 4,
   });
@@ -165,7 +165,7 @@ test("cart service rejects unavailable or insufficient update inventory", async 
 
   await assert.rejects(
     service.updateItem(ids.user, {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 2,
     }),
@@ -175,7 +175,7 @@ test("cart service rejects unavailable or insufficient update inventory", async 
   availableItem = { ...item(), available_quantity: 1 };
   await assert.rejects(
     service.updateItem(ids.user, {
-      product_id: ids.product,
+      seller_product_id: ids.product,
       variant_id: ids.variant,
       quantity: 2,
     }),
@@ -188,14 +188,14 @@ test("cart service removes matching product variants", async () => {
     repository: {
       async removeItem(userId, identity) {
         assert.equal(userId, ids.user);
-        assert.equal(identity.product_id, ids.product);
+        assert.equal(identity.seller_product_id, ids.product);
         return cart([]);
       },
     },
   });
 
   const result = await service.removeItem(ids.user, {
-    product_id: ids.product,
+    seller_product_id: ids.product,
     shop_id: ids.shop,
     product_category_id: ids.category,
   });
@@ -213,7 +213,7 @@ test("cart service succeeds when removing from a missing cart", async () => {
   });
 
   const result = await service.removeItem(ids.user, {
-    product_id: ids.product,
+    seller_product_id: ids.product,
     shop_id: ids.shop,
     product_category_id: ids.category,
   });
