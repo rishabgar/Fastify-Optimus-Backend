@@ -177,7 +177,7 @@ test("POST /auth/dev/token creates a seller token in development", async (t) => 
   const authService = {
     async getDevelopmentTokenClaims(userEmail) {
       assert.equal(userEmail, "seller@example.com");
-      return { user_id: "seller-1", role: "seller" };
+      return { user_id: "seller-1", role: "seller", shop_id: "shop-1" };
     },
   };
   const app = buildApp({
@@ -199,6 +199,7 @@ test("POST /auth/dev/token creates a seller token in development", async (t) => 
   assert.equal(body.status, "success");
   assert.equal(body.data.user_id, "seller-1");
   assert.equal(body.data.role, "seller");
+  assert.equal(body.data.shop_id, "shop-1");
   assert.equal(typeof body.data.token, "string");
 
   const payload = JSON.parse(

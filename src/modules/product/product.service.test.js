@@ -201,7 +201,7 @@ test("shop product listing verifies the shop and maps query options", async () =
       },
       async listByShop(input) {
         options = input;
-        return { items: [{ product_id: "seller-product" }] };
+        return { items: [{ product_id: "seller-product" }], total: 6 };
       },
     },
   });
@@ -226,7 +226,46 @@ test("shop product listing verifies the shop and maps query options", async () =
     sortBy: "price",
     sortDirection: "asc",
   });
-  assert.deepEqual(result, [{ product_id: "seller-product" }]);
+  assert.deepEqual(result, {
+    items: [{ product_id: "seller-product" }],
+    pagination: { page: 2, limit: 5, total: 6, total_pages: 2 },
+  });
+});
+
+test("shop product listing returns an empty page with correct pagination metadata", async () => {
+  const service = createProductService({
+    repository: {
+      async findAvailableShop() {
+        return { _id: shopId };
+      },
+      async listByShop() {
+        return { items: [], total: 6 };
+      },
+    },
+  });
+
+  assert.deepEqual(await service.listByShop(shopId, { page: 3, limit: 5 }), {
+    items: [],
+    pagination: { page: 3, limit: 5, total: 6, total_pages: 2 },
+  });
+});
+
+test("shop product listing rejects unsafe pagination before querying products", async () => {
+  const service = createProductService({
+    repository: {
+      async findAvailableShop() {
+        return { _id: shopId };
+      },
+      async listByShop() {
+        assert.fail("product query must not run");
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.listByShop(shopId, { page: 10001, limit: 20 }),
+    (error) => error.statusCode === 400 && error.details.field === "page",
+  );
 });
 
 test("shop product listing rejects an unavailable shop", async () => {
@@ -241,6 +280,63 @@ test("shop product listing rejects an unavailable shop", async () => {
   await assert.rejects(
     service.listByShop(shopId, {}),
     (error) => error.statusCode === 404 && error.details.field === "shop_id",
+  );
+});
+
+test("category summary verifies resources and paginates focused product fields", async () => {
+  let options;
+  const service = createProductService({
+    repository: {
+      async findAvailableShop(id) {
+        assert.equal(id, shopId);
+        return { _id: id };
+      },
+      async findAvailableCategory(id) {
+        assert.equal(id, categoryId);
+        return { _id: id };
+      },
+      async listSummaryByShopAndCategory(input) {
+        options = input;
+        return { items: [{ product_id: "seller-product" }], total: 6 };
+      },
+    },
+  });
+
+  const result = await service.listSummaryByShopAndCategory(
+    shopId,
+    categoryId,
+    { page: 2, limit: 5 },
+  );
+
+  assert.deepEqual(options, {
+    shopId,
+    categoryId,
+    skip: 5,
+    limit: 5,
+  });
+  assert.deepEqual(result, {
+    items: [{ product_id: "seller-product" }],
+    pagination: { page: 2, limit: 5, total: 6, total_pages: 2 },
+  });
+});
+
+test("category summary rejects unavailable resources", async () => {
+  const service = createProductService({
+    repository: {
+      async findAvailableShop() {
+        return { _id: shopId };
+      },
+      async findAvailableCategory() {
+        return null;
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.listSummaryByShopAndCategory(shopId, categoryId, {}),
+    (error) =>
+      error.statusCode === 404 &&
+      error.details.field === "product_category_id",
   );
 });
 

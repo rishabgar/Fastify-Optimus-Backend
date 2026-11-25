@@ -308,10 +308,18 @@ export function createAuthService({
         );
       }
 
-      return {
+      const claims = {
         user_id: user.id ?? user._id.toString(),
         role: user.user_type,
       };
+
+      if (user.user_type === "seller") {
+        const shop = await repository.findShopBySellerId(claims.user_id);
+        if (!shop) throw new HttpError(404, "Shop not found");
+        claims.shop_id = String(shop._id);
+      }
+
+      return claims;
     },
 
     async verifyDeliveryPartnerPhone(idToken) {

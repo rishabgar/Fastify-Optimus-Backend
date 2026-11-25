@@ -234,12 +234,16 @@ test("auth service creates development claims for sellers and customers", async 
       assert.equal(userEmail, "seller@example.com");
       return { _id: "seller-1", user_type: "seller" };
     },
+    async findShopBySellerId(sellerId) {
+      assert.equal(sellerId, "seller-1");
+      return { _id: "shop-1" };
+    },
   };
   const service = createAuthService({ repository });
 
   assert.deepEqual(
     await service.getDevelopmentTokenClaims("seller@example.com"),
-    { user_id: "seller-1", role: "seller" },
+    { user_id: "seller-1", role: "seller", shop_id: "shop-1" },
   );
 });
 

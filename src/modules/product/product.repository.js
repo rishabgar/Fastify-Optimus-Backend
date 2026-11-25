@@ -248,48 +248,229 @@ async function listSellerProducts({
     });
   }
 
-  pipeline.push(
+  pipeline.push({
+    $group: {
+      _id: "$product_id",
+      product_type: { $first: "$product_type" },
+      product_name: { $first: "$product_name" },
+      brand_name: { $first: "$brand_name" },
+      product_description: { $first: "$product_description" },
+      product_images: { $first: "$product_images" },
+      product_category_id: { $first: "$product_category_id" },
+      shop_id: { $first: "$shop_id" },
+      createdAt: { $first: "$createdAt" },
+      minimum_price: { $min: "$variant.price" },
+      variants: { $push: "$variant" },
+    },
+  });
+
+  const sort = {
+    [SORT_FIELDS[sortBy]]: sortDirection === "asc" ? 1 : -1,
+    _id: 1,
+  };
+  pipeline.push({
+    $facet: {
+      items: [
+        { $sort: sort },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $project: {
+            _id: 0,
+            product_id: "$_id",
+            product_type: 1,
+            product_name: 1,
+            brand_name: 1,
+            product_description: 1,
+            product_images: 1,
+            product_category_id: 1,
+            shop_id: 1,
+            variants: 1,
+          },
+        },
+      ],
+      metadata: [{ $count: "total" }],
+    },
+  });
+
+  const [result] = await sellerProductModel.aggregate(pipeline);
+  return {
+    items: result?.items ?? [],
+    total: result?.metadata?.[0]?.total ?? 0,
+  };
+}
+
+async function listSellerProductSummaries({ shopId, categoryId, skip, limit }) {
+  const categoryObjectId = categoryId
+    ? new Types.ObjectId(categoryId)
+    : null;
+  const masterConditions = [
+    { $eq: ["$_id", "$$masterProductId"] },
+    { $eq: ["$is_active", true] },
+    { $eq: ["$is_deleted", false] },
+  ];
+  if (categoryObjectId) {
+    masterConditions.push({
+      $eq: ["$product_category_id", categoryObjectId],
+    });
+  }
+
+  const individualConditions = [{ $eq: ["$product_type", "individual"] }];
+  if (categoryObjectId) {
+    individualConditions.push({
+      $eq: ["$product_category_id", categoryObjectId],
+    });
+  }
+
+  const pipeline = [
     {
-      $group: {
-        _id: "$product_id",
-        product_type: { $first: "$product_type" },
-        product_name: { $first: "$product_name" },
-        brand_name: { $first: "$brand_name" },
-        product_description: { $first: "$product_description" },
-        product_images: { $first: "$product_images" },
-        product_category_id: { $first: "$product_category_id" },
-        shop_id: { $first: "$shop_id" },
-        createdAt: { $first: "$createdAt" },
-        minimum_price: { $min: "$variant.price" },
-        variants: { $push: "$variant" },
+      $match: {
+        shop_id: new Types.ObjectId(shopId),
+        is_active: true,
+        is_deleted: false,
       },
     },
+    { $unwind: "$variants" },
+    { $match: { "variants.is_active": true } },
     {
-      $sort: {
-        [SORT_FIELDS[sortBy]]: sortDirection === "asc" ? 1 : -1,
-        _id: 1,
+      $lookup: {
+        from: productModel.collection.name,
+        let: { masterProductId: "$product_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: masterConditions,
+              },
+            },
+          },
+        ],
+        as: "master_product",
       },
     },
-    { $skip: skip },
-    { $limit: limit },
+    { $set: { master_product: { $arrayElemAt: ["$master_product", 0] } } },
+    { $set: { master_variant: activeMasterVariant } },
+    {
+      $match: {
+        $expr: {
+          $or: [
+            { $and: individualConditions },
+            {
+              $and: [
+                { $eq: ["$product_type", "common"] },
+                { $ne: [{ $type: "$master_product" }, "missing"] },
+                { $ne: [{ $type: "$master_variant" }, "missing"] },
+              ],
+            },
+          ],
+        },
+      },
+    },
     {
       $project: {
-        _id: 0,
-        product_id: "$_id",
-        product_type: 1,
-        product_name: 1,
-        brand_name: 1,
-        product_description: 1,
-        product_images: 1,
-        product_category_id: 1,
-        shop_id: 1,
-        variants: 1,
+        product_name: {
+          $cond: [
+            { $eq: ["$product_type", "common"] },
+            { $ifNull: ["$product_name_override", "$master_product.product_name"] },
+            "$product_name",
+          ],
+        },
+        brand_name: {
+          $cond: [
+            { $eq: ["$product_type", "common"] },
+            "$master_product.brand_name",
+            "$brand_name",
+          ],
+        },
+        product_images: {
+          $cond: [
+            { $eq: ["$product_type", "common"] },
+            {
+              $cond: [
+                { $gt: [{ $size: { $ifNull: ["$product_images_override", []] } }, 0] },
+                "$product_images_override",
+                { $ifNull: ["$master_product.product_images", []] },
+              ],
+            },
+            { $ifNull: ["$product_images", []] },
+          ],
+        },
+        ...(categoryObjectId
+          ? {
+              product_category_id: {
+                $cond: [
+                  { $eq: ["$product_type", "common"] },
+                  "$master_product.product_category_id",
+                  "$product_category_id",
+                ],
+              },
+            }
+          : {}),
+        createdAt: 1,
+        variant: {
+          ...(categoryObjectId
+            ? {
+                product_variant_id: {
+                  $cond: [
+                    { $eq: ["$product_type", "common"] },
+                    "$master_variant._id",
+                    "$variants._id",
+                  ],
+                },
+              }
+            : {}),
+          label: {
+            $cond: [
+              { $eq: ["$product_type", "common"] },
+              "$master_variant.label",
+              "$variants.label",
+            ],
+          },
+          available_quantity: "$variants.available_quantity",
+        },
       },
     },
-  );
+    {
+      $group: {
+        _id: "$_id",
+        product_name: { $first: "$product_name" },
+        brand_name: { $first: "$brand_name" },
+        product_images: { $first: "$product_images" },
+        ...(categoryObjectId
+          ? { product_category_id: { $first: "$product_category_id" } }
+          : {}),
+        variants: { $push: "$variant" },
+        createdAt: { $first: "$createdAt" },
+      },
+    },
+    {
+      $facet: {
+        items: [
+          { $sort: { createdAt: -1, _id: 1 } },
+          { $skip: skip },
+          { $limit: limit },
+          {
+            $project: {
+              _id: 0,
+              product_id: "$_id",
+              product_name: 1,
+              brand_name: 1,
+              product_images: 1,
+              ...(categoryObjectId ? { product_category_id: 1 } : {}),
+              variants: 1,
+            },
+          },
+        ],
+        metadata: [{ $count: "total" }],
+      },
+    },
+  ];
 
-  const items = await sellerProductModel.aggregate(pipeline);
-  return { items };
+  const [result] = await sellerProductModel.aggregate(pipeline);
+  return {
+    items: result?.items ?? [],
+    total: result?.metadata?.[0]?.total ?? 0,
+  };
 }
 
 export const productRepository = {
@@ -324,6 +505,14 @@ export const productRepository = {
 
   listByShop(options) {
     return listSellerProducts(options);
+  },
+
+  listSummaryByShop(options) {
+    return listSellerProductSummaries(options);
+  },
+
+  listSummaryByShopAndCategory(options) {
+    return listSellerProductSummaries(options);
   },
 
   listNearby(options) {

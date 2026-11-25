@@ -57,6 +57,54 @@ test("seller product registration requires authentication", async (t) => {
   assert.equal(response.statusCode, 401);
 });
 
+test("available master products requires seller authentication and validates pagination", async (t) => {
+  const app = buildTestApp({});
+  t.after(() => app.close());
+
+  const unauthenticated = await app.inject({
+    method: "GET",
+    url: `/product/seller/available/${shopId}`,
+  });
+  const invalidQuery = await app.inject({
+    method: "GET",
+    url: `/product/seller/available/${shopId}?limit=101`,
+    headers: { authorization: `Bearer ${await sellerToken(app)}` },
+  });
+
+  assert.equal(unauthenticated.statusCode, 401);
+  assert.equal(invalidQuery.statusCode, 400);
+});
+
+test("available master products derives the seller from JWT", async (t) => {
+  let received;
+  const app = buildTestApp({
+    async listAvailableMasterProducts(receivedShopId, receivedSellerId, query) {
+      received = { receivedShopId, receivedSellerId, query };
+      return {
+        items: [{ product_id: productId, product_name: "Rice" }],
+        pagination: { page: 1, limit: 20, total: 1, total_pages: 1 },
+      };
+    },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/product/seller/available/${shopId}?search=rice`,
+    headers: { authorization: `Bearer ${await sellerToken(app)}` },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual({ ...received, query: { ...received.query } }, {
+    receivedShopId: shopId,
+    receivedSellerId: sellerId,
+    query: { page: 1, limit: 20, search: "rice" },
+  });
+  assert.deepEqual(response.json().data.items, [
+    { product_id: productId, product_name: "Rice" },
+  ]);
+});
+
 test("seller product registration derives seller ID from JWT", async (t) => {
   const app = buildTestApp({
     async createSellerProduct(input, receivedSellerId) {

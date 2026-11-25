@@ -2,6 +2,7 @@ import productCategoryModel from "../product-category/product-category.model.js"
 import shopModel from "../shop/shop.model.js";
 import productModel from "../product/product.model.js";
 import sellerProductModel from "./seller-product.model.js";
+import { Types } from "mongoose";
 
 export const sellerProductRepository = {
   findOwnedProduct(productId, sellerId) {
@@ -43,11 +44,99 @@ export const sellerProductRepository = {
       .lean();
   },
 
+  listAvailableCategoryIdsByShopType(shopTypeId) {
+    return productCategoryModel
+      .find({
+        shop_type_ids: shopTypeId,
+        is_active: true,
+        is_deleted: false,
+      })
+      .select("_id")
+      .lean();
+  },
+
   findCommonByShopAndProduct(shopId, productId) {
     return sellerProductModel
       .findOne({ shop_id: shopId, product_id: productId, product_type: "common" })
       .select("_id")
       .lean();
+  },
+
+  async listAvailableMasterProducts({ shopId, categoryIds, search, skip, limit }) {
+    const masterMatch = {
+      product_category_id: { $in: categoryIds },
+      is_active: true,
+      is_deleted: false,
+    };
+    if (search) {
+      masterMatch.$or = [
+        { product_name: { $regex: search, $options: "i" } },
+        { brand_name: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [result] = await productModel.aggregate([
+      { $match: masterMatch },
+      {
+        $lookup: {
+          from: sellerProductModel.collection.name,
+          let: { masterProductId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                product_type: "common",
+                $expr: {
+                  $and: [
+                    { $eq: ["$shop_id", new Types.ObjectId(shopId)] },
+                    { $eq: ["$product_id", "$$masterProductId"] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "existing_seller_product",
+        },
+      },
+      { $match: { "existing_seller_product.0": { $exists: false } } },
+      { $sort: { product_name: 1, brand_name: 1, _id: 1 } },
+      {
+        $facet: {
+          items: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 0,
+                product_id: "$_id",
+                product_name: 1,
+                brand_name: 1,
+                product_images: 1,
+                variants: {
+                  $map: {
+                    input: "$variants",
+                    as: "variant",
+                    in: {
+                      product_variant_id: "$$variant._id",
+                      label: "$$variant.label",
+                    },
+                  },
+                },
+              },
+            },
+          ],
+          total: [{ $count: "count" }],
+        },
+      },
+      {
+        $project: {
+          items: 1,
+          total: { $ifNull: [{ $arrayElemAt: ["$total.count", 0] }, 0] },
+        },
+      },
+    ]);
+
+    return result ?? { items: [], total: 0 };
   },
 
   createSellerProduct(input) {

@@ -88,6 +88,16 @@ export const shopParamsSchema = {
   properties: { shop_id: objectIdSchema },
 };
 
+export const shopDetailQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    shop_id: objectIdSchema,
+    page: { type: "integer", minimum: 1 },
+    limit: { type: "integer", minimum: 1, maximum: 100 },
+  },
+};
+
 const paginationProperties = {
   page: { type: "integer", minimum: 1, default: 1 },
   limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },

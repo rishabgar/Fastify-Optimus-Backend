@@ -83,6 +83,11 @@ test("shop model defines geospatial and query indexes", () => {
         fields.is_deleted === 1,
     ),
   );
+  assert.ok(
+    indexes.some(
+      ([fields]) => fields.is_deleted === 1 && fields.createdAt === -1,
+    ),
+  );
   assert.equal(
     indexes.some(([fields]) => fields.gst_number === 1),
     false,

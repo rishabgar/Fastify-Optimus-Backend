@@ -9,21 +9,21 @@ function pointsForOrder(order) {
 
 export function createRewardService() {
   return {
-    async awardForOrder(order) {
+    async awardForOrder(order, { session } = {}) {
       const amount = pointsForOrder(order);
       if (!amount) return null;
-      return runInTransaction(async (session) => {
+      const award = async (transactionSession) => {
         try {
           const [entry] = await rewardTransactionModel.create([{
             user_id: order.customer_id,
             order_id: order._id,
             type: "earned",
             amount,
-          }], { session });
+          }], { session: transactionSession });
           const updated = await userModel.updateOne(
             { _id: order.customer_id },
             { $inc: { reward_tokens: amount } },
-            { session },
+            { session: transactionSession },
           );
           if (updated.modifiedCount !== 1) throw new HttpError(404, "Customer not found");
           return entry;
@@ -31,7 +31,8 @@ export function createRewardService() {
           if (error?.code === 11000) return null;
           throw error;
         }
-      });
+      };
+      return session ? award(session) : runInTransaction(award);
     },
   };
 }

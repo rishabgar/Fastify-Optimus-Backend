@@ -1,3 +1,13 @@
+export const createShopTypeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["shop_type_name", "shop_type_image"],
+  properties: {
+    shop_type_name: { type: "string", minLength: 1, maxLength: 150 },
+    shop_type_image: { type: "string", minLength: 1, maxLength: 2048 },
+  },
+};
+
 export const publicShopTypeListSchema = {
   type: "object",
   additionalProperties: false,

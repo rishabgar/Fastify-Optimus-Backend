@@ -1,13 +1,12 @@
-import { requireAdmin } from "../../shared/http/auth-guards.js";
+import { optionalAuthenticated, requireAdmin } from "../../shared/http/auth-guards.js";
 import { createProductCategoryController } from "./product-category.controller.js";
 import {
   adminCategoryListSchema,
+  categoryScopeQuerySchema,
   categoryParamsSchema,
   createCategorySchema,
   productCategoryParamsSchema,
   publicCategoryListSchema,
-  shopCategoryParamsSchema,
-  shopTypeCategoryParamsSchema,
   updateCategorySchema,
 } from "./product-category.schema.js";
 
@@ -49,15 +48,12 @@ export default async function productCategoryRoutes(
   );
 
   app.get(
-    "/shop_id/:shop_id",
-    { schema: { params: shopCategoryParamsSchema } },
-    controller.listByShop,
-  );
-
-  app.get(
-    "/shop_type_id/:shop_type_id",
-    { schema: { params: shopTypeCategoryParamsSchema } },
-    controller.listByShopType,
+    "/",
+    {
+      onRequest: optionalAuthenticated,
+      schema: { querystring: categoryScopeQuerySchema },
+    },
+    controller.listByScope,
   );
 
   if (isDevelopment) {

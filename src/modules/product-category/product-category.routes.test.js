@@ -190,10 +190,11 @@ test("public category list does not require authentication", async (t) => {
   assert.equal(response.json().data[0].product_category_name, "Medicine");
 });
 
-test("shop category route is public and passes the validated shop ID", async (t) => {
+test("category scope route is public and passes a validated shop ID", async (t) => {
   const app = buildTestApp({
-    async listByShop(receivedShopId) {
-      assert.equal(receivedShopId, shopId);
+    async listByScope(query) {
+      assert.equal(query.shop_id, shopId);
+      assert.equal(query.shop_type_id, undefined);
       return [{ _id: "category-id", product_category_name: "Medicine" }];
     },
   });
@@ -201,17 +202,18 @@ test("shop category route is public and passes the validated shop ID", async (t)
 
   const response = await app.inject({
     method: "GET",
-    url: `/categories/shop_id/${shopId}`,
+    url: `/categories?shop_id=${shopId}`,
   });
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().data[0].product_category_name, "Medicine");
 });
 
-test("shop type category route is public and passes the validated ID", async (t) => {
+test("category scope route passes a validated shop type ID", async (t) => {
   const app = buildTestApp({
-    async listByShopType(receivedShopTypeId) {
-      assert.equal(receivedShopTypeId, shopTypeId);
+    async listByScope(query) {
+      assert.equal(query.shop_id, undefined);
+      assert.equal(query.shop_type_id, shopTypeId);
       return [{ _id: "category-id", product_category_name: "Medicine" }];
     },
   });
@@ -219,26 +221,68 @@ test("shop type category route is public and passes the validated ID", async (t)
 
   const response = await app.inject({
     method: "GET",
-    url: `/categories/shop_type_id/${shopTypeId}`,
+    url: `/categories?shop_type_id=${shopTypeId}`,
   });
 
   assert.equal(response.statusCode, 200);
 });
 
-test("category lookup routes reject invalid IDs", async (t) => {
+test("authenticated sellers receive their added categories first for a shop type", async (t) => {
+  const app = buildTestApp({
+    async listByScope(query, receivedSellerId) {
+      assert.equal(query.shop_type_id, shopTypeId);
+      assert.equal(receivedSellerId, adminId);
+      return [{ product_category_name: "Already added" }];
+    },
+  }, "seller");
+  t.after(() => app.close());
+  const token = await adminToken(app);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/categories?shop_type_id=${shopTypeId}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().data[0].product_category_name, "Already added");
+});
+
+test("category scope route rejects an invalid supplied token", async (t) => {
+  const app = buildTestApp({
+    async listByScope() {
+      assert.fail("service must not run for an invalid token");
+    },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/categories?shop_type_id=${shopTypeId}`,
+    headers: { authorization: "Bearer invalid-token" },
+  });
+
+  assert.equal(response.statusCode, 401);
+});
+
+test("category scope route requires exactly one valid selector", async (t) => {
   const app = buildTestApp({});
   t.after(() => app.close());
 
-  const [shopResponse, shopTypeResponse] = await Promise.all([
-    app.inject({ method: "GET", url: "/categories/shop_id/not-an-id" }),
+  const [shopResponse, shopTypeResponse, missingResponse, bothResponse] = await Promise.all([
+    app.inject({ method: "GET", url: "/categories?shop_id=not-an-id" }),
     app.inject({
       method: "GET",
-      url: "/categories/shop_type_id/not-an-id",
+      url: "/categories?shop_type_id=not-an-id",
     }),
+    app.inject({ method: "GET", url: "/categories" }),
+    app.inject({ method: "GET", url: `/categories?shop_id=${shopId}&shop_type_id=${shopTypeId}` }),
   ]);
 
   assert.equal(shopResponse.statusCode, 400);
   assert.equal(shopTypeResponse.statusCode, 400);
+  assert.equal(missingResponse.statusCode, 400);
+  assert.equal(bothResponse.statusCode, 400);
   assert.deepEqual(Object.keys(shopResponse.json()).sort(), [
     "data",
     "message",

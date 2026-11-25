@@ -157,6 +157,7 @@ export const orderModel = schemaFactory(
   "order",
   {
     order_number: { type: String, required: true, trim: true },
+    idempotency_key: { type: String, trim: true },
     customer_id: {
       type: Types.ObjectId,
       ref: "user",
@@ -251,6 +252,14 @@ export const orderModel = schemaFactory(
     schema.index(
       { order_number: 1 },
       { unique: true, name: "order_number_unique_idx" },
+    );
+    schema.index(
+      { customer_id: 1, idempotency_key: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { idempotency_key: { $type: "string" } },
+        name: "order_customer_idempotency_unique_idx",
+      },
     );
     schema.index(
       { customer_id: 1, createdAt: -1 },

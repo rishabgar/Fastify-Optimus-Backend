@@ -22,6 +22,30 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function pagination(query) {
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 20;
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
+    throw validationError("Page must be an integer between 1 and 10000", "page");
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw validationError("Limit must be an integer between 1 and 100", "limit");
+  }
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+function pageData(items, total, { page, limit }) {
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      total_pages: Math.ceil(total / limit),
+    },
+  };
+}
+
 function normalizeQuantity(value, unit) {
   if (unit === "mg") return { normalized_value: value / 1000, normalized_unit: "g" };
   if (unit === "kg") return { normalized_value: value * 1000, normalized_unit: "g" };
@@ -115,13 +139,12 @@ export function createProductService({
         throw notFound("Shop not found", "shop_id");
       }
 
-      const page = query.page ?? 1;
-      const limit = query.limit ?? 20;
+      const { page, limit, skip } = pagination(query);
       const result = await repository.listByShop({
         shopId,
-        skip: (page - 1) * limit,
+        skip,
         limit,
-        ...(query.search
+        ...(query.search?.trim()
           ? { search: escapeRegExp(query.search.trim()) }
           : {}),
         ...(query.product_type
@@ -133,7 +156,41 @@ export function createProductService({
         sortBy: query.sort_by ?? "created_at",
         sortDirection: query.sort_direction ?? "desc",
       });
-      return result.items;
+      return pageData(result.items, result.total, { page, limit });
+    },
+
+    async listSummaryByShop(shopId, query) {
+      if (!(await repository.findAvailableShop(shopId))) {
+        throw notFound("Shop not found", "shop_id");
+      }
+
+      const { page, limit, skip } = pagination(query);
+      const result = await repository.listSummaryByShop({
+        shopId,
+        skip,
+        limit,
+      });
+      return pageData(result.items, result.total, { page, limit });
+    },
+
+    async listSummaryByShopAndCategory(shopId, categoryId, query) {
+      const [shop, category] = await Promise.all([
+        repository.findAvailableShop(shopId),
+        repository.findAvailableCategory(categoryId),
+      ]);
+      if (!shop) throw notFound("Shop not found", "shop_id");
+      if (!category) {
+        throw notFound("Product category not found", "product_category_id");
+      }
+
+      const { page, limit, skip } = pagination(query);
+      const result = await repository.listSummaryByShopAndCategory({
+        shopId,
+        categoryId,
+        skip,
+        limit,
+      });
+      return pageData(result.items, result.total, { page, limit });
     },
 
     async listNearby(params, query) {

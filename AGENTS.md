@@ -6,6 +6,7 @@ This is the Fastify backend for the Optimuskart e-commerce platform.
 
 - Use plain JavaScript and existing module conventions. Never add TypeScript, `.ts` files, interfaces, types, generics, or enums.
 - Every API must be production-ready.
+- Every API must include proper validation, be fast, and be production-ready.
 - Before changing an API, inspect its implementation, models and relationships, routes, controllers, services, repositories, schemas, and utilities.
 - Use actual model fields and existing patterns; never invent fields, relationships, indexes, states, or abstractions.
 - Preserve public behavior unless explicitly asked to change it. Make the smallest complete change and touch no unrelated code.

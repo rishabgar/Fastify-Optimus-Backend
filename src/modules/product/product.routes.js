@@ -10,6 +10,8 @@ import {
   shopCategoryProductParamsSchema,
   shopProductListQuerySchema,
   shopProductParamsSchema,
+  shopProductSummaryParamsSchema,
+  shopProductSummaryQuerySchema,
 } from "./product.schema.js";
 
 async function rejectControlledFields(request) {
@@ -39,6 +41,28 @@ export default async function productRoutes(app, { service }) {
       schema: { params: productDetailParamsSchema },
     },
     controller.getDetail,
+  );
+
+  app.get(
+    "/summary/:shop_id",
+    {
+      schema: {
+        params: shopProductSummaryParamsSchema,
+        querystring: shopProductSummaryQuerySchema,
+      },
+    },
+    controller.listSummaryByShop,
+  );
+
+  app.get(
+    "/summary/:shop_id/:product_category_id",
+    {
+      schema: {
+        params: shopCategoryProductParamsSchema,
+        querystring: shopProductSummaryQuerySchema,
+      },
+    },
+    controller.listSummaryByShopAndCategory,
   );
 
   app.get(

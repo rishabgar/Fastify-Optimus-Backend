@@ -33,6 +33,19 @@ function omitMongooseTimestamps(value) {
   return response;
 }
 
+function shopDetailResponse(shop) {
+  return {
+    shop_id: shop._id,
+    shop_name: shop.shop_name,
+    shop_address: shop.shop_address,
+    shop_type_id: shop.shop_type_id,
+    ...(shop.shop_image ? { shop_image: shop.shop_image } : {}),
+    is_closed: shop.is_closed,
+    operating_hours: shop.operating_hours,
+    seller_location: shop.seller_location,
+  };
+}
+
 function pageResult(items, total, page, limit) {
   return {
     items,
@@ -105,6 +118,28 @@ export function createShopService({
     const shop = await repository.findOwned(shopId, sellerId);
     if (!shop) throw notFoundError();
     return shop;
+  }
+
+  async function getDetail(shopId, sellerId) {
+    if (!Types.ObjectId.isValid(sellerId)) {
+      throw new HttpError(401, "Invalid authentication credentials");
+    }
+    if (!Types.ObjectId.isValid(shopId)) {
+      throw new HttpError(400, "Invalid shop id");
+    }
+
+    const shop = await repository.findOwnedDetail(shopId, sellerId);
+    if (!shop) throw notFoundError();
+    return shopDetailResponse(shop);
+  }
+
+  function rejectPaginationForSingleShop(query) {
+    if (query.page !== undefined || query.limit !== undefined) {
+      throw new HttpError(
+        400,
+        "Pagination is only available when an admin requests all shops",
+      );
+    }
   }
 
   return {
@@ -221,25 +256,40 @@ export function createShopService({
       return shops.map((shop) => nearbyShopResponse(shop, currentTime));
     },
 
-    async getDetail(shopId, sellerId) {
-      if (!Types.ObjectId.isValid(sellerId)) {
-        throw new HttpError(401, "Invalid authentication credentials");
-      }
-      if (!Types.ObjectId.isValid(shopId)) {
-        throw new HttpError(400, "Invalid shop id");
+    getDetail,
+
+    async getDetails(query, actor) {
+      if (actor.role === "seller") {
+        rejectPaginationForSingleShop(query);
+        if (!query.shop_id) {
+          throw new HttpError(400, "shop_id is required for sellers");
+        }
+        return getDetail(query.shop_id, actor.user_id);
       }
 
-      const shop = await repository.findOwnedDetail(shopId, sellerId);
-      if (!shop) throw notFoundError();
-      return {
-        shop_id: shop._id,
-        shop_name: shop.shop_name,
-        shop_address: shop.shop_address,
-        shop_image: shop.shop_image,
-        is_closed: shop.is_closed,
-        operating_hours: shop.operating_hours,
-        seller_location: shop.seller_location,
-      };
+      if (actor.role !== "admin") {
+        throw new HttpError(403, "Seller or admin access is required");
+      }
+
+      if (query.shop_id) {
+        rejectPaginationForSingleShop(query);
+        const shop = await repository.findDetail(query.shop_id);
+        if (!shop) throw notFoundError();
+        return shopDetailResponse(shop);
+      }
+
+      const page = query.page ?? 1;
+      const limit = query.limit ?? 20;
+      const result = await repository.listAllDetails({
+        skip: (page - 1) * limit,
+        limit,
+      });
+      return pageResult(
+        result.items.map(shopDetailResponse),
+        result.total,
+        page,
+        limit,
+      );
     },
 
     async updateForDevelopment(shopId, input) {

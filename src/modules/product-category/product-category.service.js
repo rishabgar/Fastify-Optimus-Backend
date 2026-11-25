@@ -56,6 +56,26 @@ function pageData(items, total, page, limit) {
   };
 }
 
+async function listByShop(repository, shopId) {
+  if (!(await repository.findAvailableShop(shopId))) {
+    throw unavailableResourceError("Shop", "shop_id");
+  }
+  return repository.listByShop(shopId);
+}
+
+async function listByShopType(repository, shopTypeId) {
+  if (!(await repository.findAvailableShopType(shopTypeId))) {
+    throw unavailableResourceError("Shop type", "shop_type_id");
+  }
+  const categories = await repository.listByShopType(shopTypeId);
+  return categories.map((category) => ({
+    product_category_id: category._id,
+    product_category_name: category.product_category_name,
+    product_category_type: "common",
+    product_category_image: category.product_category_image,
+  }));
+}
+
 export function createProductCategoryService({
   repository = productCategoryRepository,
 } = {}) {
@@ -186,23 +206,31 @@ export function createProductCategoryService({
     },
 
     async listByShop(shopId) {
-      if (!(await repository.findAvailableShop(shopId))) {
-        throw unavailableResourceError("Shop", "shop_id");
-      }
-      return repository.listByShop(shopId);
+      return listByShop(repository, shopId);
     },
 
     async listByShopType(shopTypeId) {
-      if (!(await repository.findAvailableShopType(shopTypeId))) {
-        throw unavailableResourceError("Shop type", "shop_type_id");
-      }
-      const categories = await repository.listByShopType(shopTypeId);
-      return categories.map((category) => ({
-        product_category_id: category._id,
-        product_category_name: category.product_category_name,
-        product_category_type: "common",
-        product_category_image: category.product_category_image,
-      }));
+      return listByShopType(repository, shopTypeId);
+    },
+
+    async listByScope({ shop_id: shopId, shop_type_id: shopTypeId }, sellerId) {
+      if (shopId) return listByShop(repository, shopId);
+
+      const categories = await listByShopType(repository, shopTypeId);
+      if (!sellerId) return categories;
+
+      const sellerCategoryIds = new Set(
+        (await repository.listSellerCategoryIdsByShopType(sellerId, shopTypeId))
+          .map((categoryId) => String(categoryId)),
+      );
+      return categories
+        .map((category, index) => ({ category, index }))
+        .sort((left, right) => {
+          const leftAdded = sellerCategoryIds.has(String(left.category.product_category_id));
+          const rightAdded = sellerCategoryIds.has(String(right.category.product_category_id));
+          return Number(rightAdded) - Number(leftAdded) || left.index - right.index;
+        })
+        .map(({ category }) => category);
     },
   };
 }

@@ -33,5 +33,17 @@ export function createSellerProductController(service) {
         message: "Seller product deleted successfully",
       });
     },
+
+    async listAvailableMasterProducts(request, reply) {
+      const products = await service.listAvailableMasterProducts(
+        request.params.shop_id,
+        request.user.user_id,
+        request.query,
+      );
+      return success(reply, {
+        message: "Available master products fetched successfully",
+        data: products,
+      });
+    },
   };
 }

@@ -69,17 +69,10 @@ export function createProductCategoryController(service) {
       });
     },
 
-    async listByShop(request, reply) {
-      const categories = await service.listByShop(request.params.shop_id);
-      return success(reply, {
-        message: "Product categories fetched successfully",
-        data: categories,
-      });
-    },
-
-    async listByShopType(request, reply) {
-      const categories = await service.listByShopType(
-        request.params.shop_type_id,
+    async listByScope(request, reply) {
+      const categories = await service.listByScope(
+        request.query,
+        request.user?.role === "seller" ? request.user.user_id : undefined,
       );
       return success(reply, {
         message: "Product categories fetched successfully",

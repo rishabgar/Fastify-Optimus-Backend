@@ -72,6 +72,15 @@ export function createShopController(service) {
       });
     },
 
+    async getDetails(request, reply) {
+      console.log("request.query");
+      const shops = await service.getDetails(request.query, request.user);
+      return success(reply, {
+        message: "Shop details fetched successfully",
+        data: shops,
+      });
+    },
+
     async updateForDevelopment(request, reply) {
       const shop = await service.updateForDevelopment(
         request.params.shop_id,

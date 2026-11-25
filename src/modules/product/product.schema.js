@@ -76,6 +76,24 @@ export const shopProductParamsSchema = {
   },
 };
 
+export const shopProductSummaryParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["shop_id"],
+  properties: {
+    shop_id: objectIdSchema,
+  },
+};
+
+export const shopProductSummaryQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    page: { type: "integer", minimum: 1, maximum: 10000, default: 1 },
+    limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+  },
+};
+
 export const productListQuerySchema = {
   type: "object",
   additionalProperties: false,
@@ -89,9 +107,9 @@ export const shopProductListQuerySchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    page: { type: "integer", minimum: 1, default: 1 },
+    page: { type: "integer", minimum: 1, maximum: 10000, default: 1 },
     limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
-    search: { type: "string", minLength: 1, maxLength: 200 },
+    search: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" },
     product_type: { type: "string", enum: ["common", "individual"] },
     in_stock: { type: "boolean" },
     sort_by: {

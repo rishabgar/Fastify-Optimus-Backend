@@ -119,6 +119,10 @@ export const shopModel = schemaFactory(
       { shop_type_id: 1, is_active: 1, is_deleted: 1 },
       { name: "shop_type_status_idx" },
     );
+    schema.index(
+      { is_deleted: 1, createdAt: -1 },
+      { name: "shop_admin_detail_list_idx" },
+    );
   },
 );
 

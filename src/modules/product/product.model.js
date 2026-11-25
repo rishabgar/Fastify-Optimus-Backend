@@ -115,6 +115,16 @@ export const productModel = schemaFactory(
       { name: "product_category_status_idx" },
     );
     schema.index(
+      {
+        product_category_id: 1,
+        is_active: 1,
+        is_deleted: 1,
+        product_name: 1,
+        brand_name: 1,
+      },
+      { name: "product_category_status_name_brand_idx" },
+    );
+    schema.index(
       { "variants.sku": 1 },
       { unique: true, name: "product_variant_sku_unique_idx" },
     );

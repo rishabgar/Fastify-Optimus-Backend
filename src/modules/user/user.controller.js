@@ -2,6 +2,11 @@ import { success } from "../../shared/http/response.js";
 
 export function createUserController(service) {
   return {
+    async getProfile(request, reply) {
+      const user = await service.getProfile(request.user.user_id);
+      return success(reply, { data: user });
+    },
+
     async softDelete(request, reply) {
       const user = await service.softDelete(request.user.user_id);
       return success(reply, {

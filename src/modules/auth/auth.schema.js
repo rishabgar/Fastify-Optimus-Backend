@@ -112,6 +112,7 @@ export const developmentTokenResponseSchema = {
       properties: {
         user_id: { type: "string" },
         role: { type: "string", enum: ["seller", "customer"] },
+        shop_id: { type: "string" },
         token: { type: "string" },
       },
     },

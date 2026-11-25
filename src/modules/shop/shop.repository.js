@@ -23,6 +23,7 @@ const SELLER_DETAIL_FIELDS = [
   "shop_name",
   "shop_address",
   "shop_image",
+  "shop_type_id",
   "is_closed",
   "operating_hours",
   "seller_location",
@@ -118,6 +119,28 @@ export const shopRepository = {
       })
       .select(SELLER_DETAIL_FIELDS)
       .lean();
+  },
+
+  findDetail(shopId) {
+    return shopModel
+      .findOne({ _id: shopId, is_deleted: false })
+      .select(SELLER_DETAIL_FIELDS)
+      .lean();
+  },
+
+  async listAllDetails({ skip, limit }) {
+    const filter = { is_deleted: false };
+    const [items, total] = await Promise.all([
+      shopModel
+        .find(filter)
+        .select(SELLER_DETAIL_FIELDS)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      shopModel.countDocuments(filter),
+    ]);
+    return { items, total };
   },
 
   updateOwned(shopId, sellerId, updates) {

@@ -170,3 +170,22 @@ export const sellerProductParamsSchema = {
     product_id: objectIdSchema,
   },
 };
+
+export const availableMasterProductParamsSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["shop_id"],
+  properties: {
+    shop_id: objectIdSchema,
+  },
+};
+
+export const availableMasterProductQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    page: { type: "integer", minimum: 1, maximum: 10000, default: 1 },
+    limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+    search: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" },
+  },
+};

@@ -214,7 +214,10 @@ test("shop product listing is public and forwards validated filters", async (t) 
           sort_by: "price",
           sort_direction: "asc",
         });
-        return [{ product_id: "seller-product-id", variants: [] }];
+        return {
+          items: [{ product_id: "seller-product-id", variants: [] }],
+          pagination: { page: 2, limit: 5, total: 6, total_pages: 2 },
+        };
       },
     },
   });
@@ -229,7 +232,13 @@ test("shop product listing is public and forwards validated filters", async (t) 
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().status, "success");
-  assert.equal(response.json().data[0].product_id, "seller-product-id");
+  assert.equal(response.json().data.items[0].product_id, "seller-product-id");
+  assert.deepEqual(response.json().data.pagination, {
+    page: 2,
+    limit: 5,
+    total: 6,
+    total_pages: 2,
+  });
 });
 
 test("shop product listing validates IDs and query filters", async (t) => {
@@ -247,9 +256,144 @@ test("shop product listing validates IDs and query filters", async (t) => {
     method: "GET",
     url: `/product/${shopId}?product_type=unsupported`,
   });
+  const invalidPage = await app.inject({
+    method: "GET",
+    url: `/product/${shopId}?page=10001`,
+  });
+  const blankSearch = await app.inject({
+    method: "GET",
+    url: `/product/${shopId}?search=%20%20%20`,
+  });
 
   assert.equal(invalidId.statusCode, 400);
   assert.equal(invalidType.statusCode, 400);
+  assert.equal(invalidPage.statusCode, 400);
+  assert.equal(blankSearch.statusCode, 400);
+});
+
+test("shop product summary is public and returns paginated summaries", async (t) => {
+  const app = buildApp({
+    connectDatabase: false,
+    productService: {
+      async listSummaryByShop(receivedShopId, query) {
+        assert.equal(receivedShopId, shopId);
+        assert.deepEqual({ ...query }, { page: 2, limit: 5 });
+        return {
+          items: [
+            {
+              product_id: "seller-product-id",
+              product_name: "Rice",
+              brand_name: "Farm",
+              product_images: [{ url: "https://example.com/rice.jpg" }],
+              variants: [{ label: "1 kg", available_quantity: 8 }],
+            },
+          ],
+          pagination: { page: 2, limit: 5, total: 6, total_pages: 2 },
+        };
+      },
+    },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/product/summary/${shopId}?page=2&limit=5`,
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().data, {
+    items: [
+      {
+        product_id: "seller-product-id",
+        product_name: "Rice",
+        brand_name: "Farm",
+        product_images: [{ url: "https://example.com/rice.jpg" }],
+        variants: [{ label: "1 kg", available_quantity: 8 }],
+      },
+    ],
+    pagination: { page: 2, limit: 5, total: 6, total_pages: 2 },
+  });
+});
+
+test("shop category summary is public and returns focused product fields", async (t) => {
+  const app = buildApp({
+    connectDatabase: false,
+    productService: {
+      async listSummaryByShopAndCategory(
+        receivedShopId,
+        receivedCategoryId,
+        query,
+      ) {
+        assert.equal(receivedShopId, shopId);
+        assert.equal(receivedCategoryId, categoryId);
+        assert.deepEqual({ ...query }, { page: 2, limit: 5 });
+        return {
+          items: [
+            {
+              product_id: "seller-product-id",
+              product_name: "Rice",
+              brand_name: "Farm",
+              product_images: [{ url: "https://example.com/rice.jpg" }],
+              product_category_id: categoryId,
+              variants: [
+                {
+                  product_variant_id: "seller-variant-id",
+                  label: "1 kg",
+                  available_quantity: 8,
+                },
+              ],
+            },
+          ],
+          pagination: { page: 2, limit: 5, total: 6, total_pages: 2 },
+        };
+      },
+    },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/product/summary/${shopId}/${categoryId}?page=2&limit=5`,
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().data.items[0].product_category_id, categoryId);
+  assert.deepEqual(response.json().data.items[0].variants, [
+    {
+      product_variant_id: "seller-variant-id",
+      label: "1 kg",
+      available_quantity: 8,
+    },
+  ]);
+});
+
+test("shop product summary validates the shop ID and pagination", async (t) => {
+  const app = buildApp({ connectDatabase: false, productService: {} });
+  t.after(() => app.close());
+
+  const [invalidId, invalidLimit] = await Promise.all([
+    app.inject({ method: "GET", url: "/product/summary/not-an-id" }),
+    app.inject({ method: "GET", url: `/product/summary/${shopId}?limit=101` }),
+  ]);
+
+  assert.equal(invalidId.statusCode, 400);
+  assert.equal(invalidLimit.statusCode, 400);
+});
+
+test("shop category summary validates IDs and pagination", async (t) => {
+  const app = buildApp({ connectDatabase: false, productService: {} });
+  t.after(() => app.close());
+
+  const [invalidId, invalidLimit] = await Promise.all([
+    app.inject({ method: "GET", url: `/product/summary/not-an-id/${categoryId}` }),
+    app.inject({
+      method: "GET",
+      url: `/product/summary/${shopId}/${categoryId}?limit=101`,
+    }),
+  ]);
+
+  assert.equal(invalidId.statusCode, 400);
+  assert.equal(invalidLimit.statusCode, 400);
 });
 
 test("nearby product listing is public and forwards validated input", async (t) => {

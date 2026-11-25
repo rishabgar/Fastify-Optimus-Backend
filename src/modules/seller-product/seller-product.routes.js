@@ -2,6 +2,8 @@ import { requireSeller } from "../../shared/http/auth-guards.js";
 import { HttpError } from "../../shared/http/http-error.js";
 import { createSellerProductController } from "./seller-product.controller.js";
 import {
+  availableMasterProductParamsSchema,
+  availableMasterProductQuerySchema,
   createSellerProductSchema,
   sellerProductParamsSchema,
   updateSellerProductSchema,
@@ -72,6 +74,18 @@ async function rejectUpdateControlledFields(request) {
 
 export default async function sellerProductRoutes(app, { service }) {
   const controller = createSellerProductController(service);
+
+  app.get(
+    "/seller/available/:shop_id",
+    {
+      onRequest: requireSeller,
+      schema: {
+        params: availableMasterProductParamsSchema,
+        querystring: availableMasterProductQuerySchema,
+      },
+    },
+    controller.listAvailableMasterProducts,
+  );
 
   app.post(
     "/seller/create",

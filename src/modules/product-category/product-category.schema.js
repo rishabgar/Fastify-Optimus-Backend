@@ -51,18 +51,25 @@ export const productCategoryParamsSchema = {
   properties: { product_category_id: objectIdSchema },
 };
 
-export const shopCategoryParamsSchema = {
+export const categoryScopeQuerySchema = {
   type: "object",
   additionalProperties: false,
-  required: ["shop_id"],
-  properties: { shop_id: objectIdSchema },
-};
-
-export const shopTypeCategoryParamsSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["shop_type_id"],
-  properties: { shop_type_id: objectIdSchema },
+  properties: {
+    shop_id: objectIdSchema,
+    shop_type_id: objectIdSchema,
+  },
+  oneOf: [
+    {
+      required: ["shop_id"],
+      properties: { shop_id: objectIdSchema },
+      not: { required: ["shop_type_id"] },
+    },
+    {
+      required: ["shop_type_id"],
+      properties: { shop_type_id: objectIdSchema },
+      not: { required: ["shop_id"] },
+    },
+  ],
 };
 
 export const adminCategoryListSchema = {

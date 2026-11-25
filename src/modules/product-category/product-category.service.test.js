@@ -277,3 +277,65 @@ test("listByShopType rejects unavailable shop types", async () => {
       error.statusCode === 404 && error.details.field === "shop_type_id",
   );
 });
+
+test("listByScope delegates to the matching validated selector", async () => {
+  const service = createProductCategoryService({
+    repository: {
+      async findAvailableShop(id) {
+        assert.equal(id, shopId);
+        return { _id: id };
+      },
+      async listByShop(id) {
+        return [{ _id: id }];
+      },
+      async findAvailableShopType(id) {
+        assert.equal(id, shopTypeId);
+        return { _id: id };
+      },
+      async listByShopType(id) {
+        return [{ _id: id, product_category_name: "Medicine" }];
+      },
+    },
+  });
+
+  assert.deepEqual(await service.listByScope({ shop_id: shopId }), [{ _id: shopId }]);
+  assert.deepEqual(await service.listByScope({ shop_type_id: shopTypeId }), [{
+    product_category_id: shopTypeId,
+    product_category_name: "Medicine",
+    product_category_type: "common",
+    product_category_image: undefined,
+  }]);
+});
+
+test("seller shop type categories put added categories first", async () => {
+  const addedCategoryId = "64b000000000000000000005";
+  const otherCategoryId = "64b000000000000000000006";
+  const service = createProductCategoryService({
+    repository: {
+      async findAvailableShopType() {
+        return { _id: shopTypeId };
+      },
+      async listByShopType() {
+        return [
+          { _id: otherCategoryId, product_category_name: "Other" },
+          { _id: addedCategoryId, product_category_name: "Added" },
+        ];
+      },
+      async listSellerCategoryIdsByShopType(sellerId, receivedShopTypeId) {
+        assert.equal(sellerId, adminId);
+        assert.equal(receivedShopTypeId, shopTypeId);
+        return [addedCategoryId];
+      },
+    },
+  });
+
+  const categories = await service.listByScope(
+    { shop_type_id: shopTypeId },
+    adminId,
+  );
+
+  assert.deepEqual(categories.map((category) => category.product_category_id), [
+    addedCategoryId,
+    otherCategoryId,
+  ]);
+});

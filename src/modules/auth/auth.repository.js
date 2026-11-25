@@ -66,4 +66,12 @@ export const authRepository = {
       .select("_id")
       .lean();
   },
+
+  findShopBySellerId(sellerId) {
+    return shopModel
+      .findOne({ seller_id: sellerId, is_deleted: false })
+      .select("_id")
+      .sort({ createdAt: 1 })
+      .lean();
+  },
 };

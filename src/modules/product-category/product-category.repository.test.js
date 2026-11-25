@@ -94,3 +94,31 @@ test("shop type lookup uses the direct category mapping", (t) => {
   assert.match(projection, /product_category_name/);
   assert.deepEqual(sort, { sort_order: 1, product_category_name: 1 });
 });
+
+test("seller category lookup limits categories to the seller's active products in the shop type", async (t) => {
+  const sellerId = "64b000000000000000000007";
+  const originalAggregate = sellerProductModel.aggregate;
+  let pipeline;
+  sellerProductModel.aggregate = (receivedPipeline) => {
+    pipeline = receivedPipeline;
+    return [{ _id: shopId }];
+  };
+  t.after(() => {
+    sellerProductModel.aggregate = originalAggregate;
+  });
+
+  const categoryIds = await productCategoryRepository.listSellerCategoryIdsByShopType(
+    sellerId,
+    shopTypeId,
+  );
+
+  assert.deepEqual(categoryIds, [shopId]);
+  assert.equal(pipeline[0].$match.seller_id.toString(), sellerId);
+  assert.equal(pipeline[0].$match.is_active, true);
+  assert.equal(pipeline[0].$match.is_deleted, false);
+  const shopLookup = pipeline.find(
+    (stage) => stage.$lookup?.from === shopModel.collection.name,
+  );
+  assert.ok(shopLookup);
+  assert.equal(shopLookup.$lookup.pipeline[0].$match.$expr.$and[1].$eq[1].toString(), shopTypeId);
+});

@@ -72,6 +72,7 @@ export function createAuthController(authService) {
         data: {
           user_id: user.user_id,
           role: user.role,
+          ...(user.role === "seller" ? { shop_id: user.shop_id } : {}),
           token,
         },
       });

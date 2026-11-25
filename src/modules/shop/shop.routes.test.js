@@ -126,6 +126,51 @@ test("authenticated seller can fetch an owned shop by id", async (t) => {
   assert.equal(Object.hasOwn(response.json().data, "_id"), false);
 });
 
+test("authenticated users can fetch shops through the optional shop_id query", async (t) => {
+  let receivedQuery;
+  let receivedActor;
+  const app = buildTestApp({
+    async getDetails(query, actor) {
+      receivedQuery = query;
+      receivedActor = actor;
+      return { shop_id: shopId, shop_name: "Health Store" };
+    },
+  });
+  t.after(() => app.close());
+  const token = await tokenFor(app);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/shop?shop_id=${shopId}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual({ ...receivedQuery }, {
+    shop_id: shopId,
+  });
+  assert.equal(receivedActor.user_id, sellerId);
+  assert.equal(receivedActor.role, "seller");
+});
+
+test("shop query endpoint rejects invalid shop ids", async (t) => {
+  const app = buildTestApp({
+    async getDetails() {
+      assert.fail("service must not run for an invalid shop id");
+    },
+  });
+  t.after(() => app.close());
+  const token = await tokenFor(app);
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/shop?shop_id=not-an-id",
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  assert.equal(response.statusCode, 400);
+});
+
 test("authenticated seller can update shop details and closed state", async (t) => {
   const expected = {
     _id: shopId,

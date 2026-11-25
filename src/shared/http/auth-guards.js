@@ -7,6 +7,11 @@ export async function requireAuthenticated(request) {
   }
 }
 
+export async function optionalAuthenticated(request) {
+  if (!request.headers.authorization) return;
+  await requireAuthenticated(request);
+}
+
 export async function requireAdmin(request) {
   await requireAuthenticated(request);
   if (request.user.role !== "admin") {

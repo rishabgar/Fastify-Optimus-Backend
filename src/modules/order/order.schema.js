@@ -1,6 +1,21 @@
 const objectId = { type: "string", pattern: "^[0-9a-fA-F]{24}$" };
 const coordinates = { type: "array", minItems: 2, maxItems: 2, items: { type: "number" } };
 
+export const paginationQuerySchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    page: { type: "integer", minimum: 1, default: 1 },
+    limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+  },
+};
+
+export const idempotencyHeadersSchema = {
+  type: "object",
+  properties: {
+    "idempotency-key": { type: "string", minLength: 8, maxLength: 200 },
+  },
+};
+
 export const placeOrderSchema = {
   type: "object", additionalProperties: false, required: ["address", "payment_method"],
   properties: {

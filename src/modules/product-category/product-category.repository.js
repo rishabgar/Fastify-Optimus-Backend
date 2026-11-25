@@ -230,6 +230,43 @@ export const productCategoryRepository = {
       .lean();
   },
 
+  async listSellerCategoryIdsByShopType(sellerId, shopTypeId) {
+    const categories = await sellerProductModel.aggregate([
+      {
+        $match: {
+          seller_id: new Types.ObjectId(sellerId),
+          is_active: true,
+          is_deleted: false,
+        },
+      },
+      {
+        $lookup: {
+          from: shopModel.collection.name,
+          let: { shopId: "$shop_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$_id", "$$shopId"] },
+                    { $eq: ["$shop_type_id", new Types.ObjectId(shopTypeId)] },
+                    { $eq: ["$is_active", true] },
+                    { $eq: ["$is_deleted", false] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "shop",
+        },
+      },
+      { $unwind: "$shop" },
+      ...categoryResolutionStages,
+      { $project: { _id: 1 } },
+    ]);
+    return categories.map((category) => category._id);
+  },
+
   update(categoryId, updates) {
     return productCategoryModel
       .findOneAndUpdate({ _id: categoryId, is_deleted: false }, updates, {

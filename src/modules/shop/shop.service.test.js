@@ -70,6 +70,7 @@ test("shop detail enforces ownership and exposes only seller detail fields", asy
           shop_name: "Health Store",
           shop_address: "123 Main Street",
           shop_image: "shop.jpg",
+          shop_type_id: shopTypeId,
           is_closed: false,
           operating_hours: { open: "09:00", close: "23:55" },
           seller_location: { type: "Point", coordinates: [77.04, 28.68] },
@@ -87,6 +88,7 @@ test("shop detail enforces ownership and exposes only seller detail fields", asy
     shop_id: shopId,
     shop_name: "Health Store",
     shop_address: "123 Main Street",
+    shop_type_id: shopTypeId,
     shop_image: "shop.jpg",
     is_closed: false,
     operating_hours: { open: "09:00", close: "23:55" },
@@ -109,6 +111,67 @@ test("shop detail hides missing, deleted, and unowned shops", async () => {
     service.getDetail(shopId, sellerId),
     (error) => error.statusCode === 404 && error.message === "Shop not found",
   );
+});
+
+test("shop details require sellers to provide a shop id", async () => {
+  const service = createShopService({ repository: {} });
+
+  await assert.rejects(
+    service.getDetails({}, { user_id: sellerId, role: "seller" }),
+    (error) =>
+      error.statusCode === 400 && error.message === "shop_id is required for sellers",
+  );
+});
+
+test("shop details reject pagination for single-shop requests", async () => {
+  const service = createShopService({ repository: {} });
+
+  await assert.rejects(
+    service.getDetails({ page: 1 }, { user_id: sellerId, role: "seller" }),
+    (error) => error.statusCode === 400,
+  );
+  await assert.rejects(
+    service.getDetails(
+      { shop_id: shopId, limit: 20 },
+      { user_id: sellerId, role: "admin" },
+    ),
+    (error) => error.statusCode === 400,
+  );
+});
+
+test("admin shop details support an exact shop or a paginated list", async () => {
+  const service = createShopService({
+    repository: {
+      async findDetail(receivedShopId) {
+        assert.equal(receivedShopId, shopId);
+        return {
+          _id: shopId,
+          shop_name: "Health Store",
+          shop_address: "123 Main Street",
+          is_closed: false,
+          operating_hours: { open: "09:00", close: "23:55" },
+          seller_location: { type: "Point", coordinates: [77.04, 28.68] },
+        };
+      },
+      async listAllDetails({ skip, limit }) {
+        assert.equal(skip, 20);
+        assert.equal(limit, 20);
+        return { items: [], total: 0 };
+      },
+    },
+  });
+
+  const actor = { user_id: sellerId, role: "admin" };
+  const detail = await service.getDetails({ shop_id: shopId }, actor);
+  const list = await service.getDetails({ page: 2, limit: 20 }, actor);
+
+  assert.equal(detail.shop_id, shopId);
+  assert.deepEqual(list.pagination, {
+    page: 2,
+    limit: 20,
+    total: 0,
+    total_pages: 0,
+  });
 });
 
 test("nearby discovery delegates distance filtering to the repository", async () => {

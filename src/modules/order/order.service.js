@@ -21,6 +21,108 @@ const deliveryFee = () => Math.max(Number(process.env.DELIVERY_FEE) || 0, 0);
 
 function fail(statusCode, message) { throw new HttpError(statusCode, message); }
 function ensureId(value, label) { if (!Types.ObjectId.isValid(value)) fail(400, `Invalid ${label}`); }
+function pagination(query = {}) {
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 20;
+  return { page, limit, skip: (page - 1) * limit };
+}
+function pageData(items, total, { page, limit }) {
+  return { items, pagination: { page, limit, total, total_pages: Math.ceil(total / limit) } };
+}
+
+function itemResponse(item) {
+  return {
+    seller_product_id: item.seller_product_id,
+    variant_id: item.variant_id,
+    product_type: item.product_type,
+    ...(item.product_id ? { product_id: item.product_id } : {}),
+    ...(item.product_variant_id ? { product_variant_id: item.product_variant_id } : {}),
+    ...(item.product_category_id ? { product_category_id: item.product_category_id } : {}),
+    product_name: item.product_name,
+    ...(item.brand_name ? { brand_name: item.brand_name } : {}),
+    variant_label: item.variant_label,
+    ...(item.quantity_value != null ? { quantity_value: item.quantity_value, quantity_unit: item.quantity_unit } : {}),
+    ...(item.image_url ? { image_url: item.image_url } : {}),
+    ...(item.seller_sku ? { seller_sku: item.seller_sku } : {}),
+    unit_price: item.unit_price,
+    ...(item.mrp != null ? { mrp: item.mrp } : {}),
+    quantity: item.quantity,
+    line_total: item.line_total,
+  };
+}
+
+function shopOrderResponse(shop, { includeFinancials = false } = {}) {
+  return {
+    shop_order_id: shop._id,
+    shop_id: shop.shop_id,
+    status: shop.status,
+    shop: shop.shop_snapshot,
+    items: shop.items.map(itemResponse),
+    items_total: shop.items_total,
+    ...(includeFinancials ? {
+      commission_pct: shop.commission_pct,
+      commission_amount: shop.commission_amount,
+      seller_earning: shop.seller_earning,
+    } : {}),
+    ...(shop.rejection_reason ? { rejection_reason: shop.rejection_reason } : {}),
+    timeline: shop.timeline.map((entry) => ({ status: entry.status, at: entry.at, ...(entry.note ? { note: entry.note } : {}) })),
+  };
+}
+
+function addressResponse(address) {
+  return {
+    recipient_name: address.recipient_name,
+    phone: address.phone,
+    address: address.address,
+    location: address.location,
+  };
+}
+
+function customerOrderResponse(order) {
+  return {
+    order_id: order._id,
+    order_number: order.order_number,
+    status: order.status,
+    delivery_address: addressResponse(order.delivery_address),
+    shop_orders: order.shop_orders.map((shop) => shopOrderResponse(shop)),
+    pricing: order.pricing,
+    ...(order.coupon?.coupon_id ? { coupon: { code: order.coupon.code, discount_at_placement: order.coupon.discount_at_placement } } : {}),
+    payment_method: order.payment_method,
+    payment_status: order.payment_status,
+    ...(order.delivery?.partner_snapshot ? { delivery_partner: order.delivery.partner_snapshot } : {}),
+    ...(order.delivery?.customer_otp?.code ? { customer_otp: { code: order.delivery.customer_otp.code, generated_at: order.delivery.customer_otp.generated_at } } : {}),
+  };
+}
+
+function sellerOrderResponse(order, sellerId) {
+  return {
+    order_id: order._id,
+    order_number: order.order_number,
+    status: order.status,
+    customer: order.customer_snapshot,
+    delivery_address: addressResponse(order.delivery_address),
+    payment_status: order.payment_status,
+    shop_orders: order.shop_orders
+      .filter((shop) => String(shop.seller_id) === String(sellerId))
+      .map((shop) => shopOrderResponse(shop, { includeFinancials: true })),
+  };
+}
+
+function deliveryOrderResponse(order) {
+  return {
+    order_id: order._id,
+    order_number: order.order_number,
+    status: order.status,
+    customer: order.customer_snapshot,
+    delivery_address: addressResponse(order.delivery_address),
+    shop_orders: order.shop_orders.map((shop) => shopOrderResponse(shop)),
+    payment_method: order.payment_method,
+    payment_status: order.payment_status,
+    ...(order.delivery?.assigned_at ? { assigned_at: order.delivery.assigned_at } : {}),
+    ...(order.delivery?.delivered_at ? { delivered_at: order.delivery.delivered_at } : {}),
+    ...(order.delivery?.earning_amount != null ? { earning_amount: order.delivery.earning_amount } : {}),
+  };
+}
 
 async function resolveAddress(customer, input, session) {
   let value;
@@ -98,6 +200,15 @@ async function reserveLine(line, session) {
   if (result.modifiedCount !== 1) fail(409, "Inventory changed during checkout");
 }
 
+async function releaseLine(item, session) {
+  const released = await sellerProductModel.updateOne(
+    { _id: item.seller_product_id, variants: { $elemMatch: { _id: item.variant_id, reserved_quantity: { $gte: item.quantity } } } },
+    { $inc: { "variants.$.available_quantity": item.quantity, "variants.$.reserved_quantity": -item.quantity } },
+    { session },
+  );
+  if (released.modifiedCount !== 1) fail(409, "Inventory changed during cancellation");
+}
+
 function buildShopOrders(lines, customerId) {
   const groups = new Map();
   for (const line of lines) {
@@ -160,9 +271,23 @@ async function paymentModelUpdateExpired(orderId, session) {
 
 export function createOrderService({ rewardService = createRewardService() } = {}) {
   return {
-    async place(customerId, input) {
+    async place(customerId, input, idempotencyKey) {
+      if (idempotencyKey) {
+        const existing = await orderModel.findOne({ customer_id: customerId, idempotency_key: idempotencyKey }).lean()
+          ?? await orderHistoryModel.findOne({ customer_id: customerId, idempotency_key: idempotencyKey }).lean();
+        if (existing) return customerOrderResponse(existing);
+      }
       let created;
-      await runInTransaction(async (session) => {
+      try {
+        await runInTransaction(async (session) => {
+        if (idempotencyKey) {
+          const existing = await orderModel.findOne({ customer_id: customerId, idempotency_key: idempotencyKey }).session(session)
+            ?? await orderHistoryModel.findOne({ customer_id: customerId, idempotency_key: idempotencyKey }).session(session);
+          if (existing) {
+            created = existing;
+            return;
+          }
+        }
         const [customer, cart] = await Promise.all([userModel.findOne({ _id: customerId, is_deleted: false }).session(session), cartModel.findOne({ user_id: customerId }).session(session)]);
         if (!customer) fail(404, "Customer not found");
         if (!cart?.items?.length) fail(400, "Cart is empty");
@@ -176,6 +301,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
         const payableAmount = r2(Math.max(0, subtotal + deliveryFee() - couponData.discount));
         [created] = await orderModel.create([{
           order_number: orderNumber(), customer_id: customerId,
+          ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
           customer_snapshot: { name: [customer.first_name, customer.last_name].filter(Boolean).join(" "), phone: customer.user_phone_no },
           delivery_address: address, shop_orders: shopOrders, status: "processing",
           pricing: { items_total_original: subtotal, items_total: subtotal, delivery_fee: deliveryFee(), coupon_discount: couponData.discount, platform_coupon_cost: couponData.discount, payable_amount: payableAmount },
@@ -184,8 +310,16 @@ export function createOrderService({ rewardService = createRewardService() } = {
         if (input.coupon_id) await userCouponModel.updateOne({ user_id: customerId, coupon_id: input.coupon_id, status: "reserved" }, { $set: { status: "used", used_at: new Date(), order_id: created._id } }, { session });
         const cleared = await cartModel.updateOne({ _id: cart._id }, { $set: { items: [] } }, { session });
         if (cleared.modifiedCount !== 1) fail(409, "Cart changed during checkout");
-      });
-      return created.toObject();
+        });
+      } catch (error) {
+        if (idempotencyKey && error?.code === 11000) {
+          const existing = await orderModel.findOne({ customer_id: customerId, idempotency_key: idempotencyKey }).lean()
+            ?? await orderHistoryModel.findOne({ customer_id: customerId, idempotency_key: idempotencyKey }).lean();
+          if (existing) return customerOrderResponse(existing);
+        }
+        throw error;
+      }
+      return customerOrderResponse(created.toObject());
     },
 
     async preview(customerId) {
@@ -198,21 +332,47 @@ export function createOrderService({ rewardService = createRewardService() } = {
       return { shops: shopOrders.map((shop) => ({ shop_id: shop.shop_id, items: shop.items, items_total: shop.items_total })), items_total: subtotal, delivery_fee: deliveryFee(), coupon_discount: 0, payable_amount: r2(subtotal + deliveryFee()) };
     },
 
-    async listCustomer(customerId) { return orderModel.find({ customer_id: customerId }).sort({ createdAt: -1 }).lean(); },
-    async listHistory(customerId) { return orderHistoryModel.find({ customer_id: customerId }).sort({ createdAt: -1 }).lean(); },
+    async listCustomer(customerId, query) {
+      const paging = pagination(query);
+      const [orders, total] = await Promise.all([
+        orderModel.find({ customer_id: customerId }).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.limit).lean(),
+        orderModel.countDocuments({ customer_id: customerId }),
+      ]);
+      return pageData(orders.map(customerOrderResponse), total, paging);
+    },
+    async listHistory(customerId, query) {
+      const paging = pagination(query);
+      const [orders, total] = await Promise.all([
+        orderHistoryModel.find({ customer_id: customerId }).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.limit).lean(),
+        orderHistoryModel.countDocuments({ customer_id: customerId }),
+      ]);
+      return pageData(orders.map(customerOrderResponse), total, paging);
+    },
     async customerDetail(customerId, orderId) {
       const order = await orderModel.findOne({ _id: orderId, customer_id: customerId }).lean() ?? await orderHistoryModel.findOne({ _id: orderId, customer_id: customerId }).lean();
       if (!order) fail(404, "Order not found");
-      return order;
+      return customerOrderResponse(order);
     },
-    async listSeller(sellerId) {
-      const orders = await orderModel.find({ "shop_orders.seller_id": sellerId }).sort({ createdAt: -1 }).lean();
-      return orders.map((order) => ({ ...order, shop_orders: order.shop_orders.filter((shop) => String(shop.seller_id) === String(sellerId)) }));
+    async listSeller(sellerId, query) {
+      const paging = pagination(query);
+      const filter = { "shop_orders.seller_id": sellerId };
+      const [orders, total] = await Promise.all([
+        orderModel.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.limit).lean(),
+        orderModel.countDocuments(filter),
+      ]);
+      return pageData(orders.map((order) => sellerOrderResponse(order, sellerId)), total, paging);
     },
-    async sellerEarnings(sellerId) {
-      const orders = await orderHistoryModel.find({ status: "delivered", "shop_orders.seller_id": sellerId, payment_status: "paid" }).lean();
-      const items = orders.flatMap((order) => order.shop_orders.filter((shop) => String(shop.seller_id) === String(sellerId) && shop.status === "delivered").map((shop) => ({ order_id: order._id, order_number: order.order_number, shop_order_id: shop._id, amount: shop.seller_earning })));
-      return { items, total: r2(items.reduce((sum, item) => sum + item.amount, 0)) };
+    async sellerEarnings(sellerId, query) {
+      const paging = pagination(query);
+      const [result] = await orderHistoryModel.aggregate([
+        { $match: { status: "delivered", payment_status: "paid", "shop_orders.seller_id": new Types.ObjectId(sellerId) } },
+        { $unwind: "$shop_orders" },
+        { $match: { "shop_orders.seller_id": new Types.ObjectId(sellerId), "shop_orders.status": "delivered" } },
+        { $project: { _id: 0, order_id: "$_id", order_number: 1, shop_order_id: "$shop_orders._id", amount: "$shop_orders.seller_earning" } },
+        { $facet: { items: [{ $sort: { order_number: -1 } }, { $skip: paging.skip }, { $limit: paging.limit }], totals: [{ $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }] } },
+      ]);
+      const totals = result?.totals?.[0] ?? { total: 0, count: 0 };
+      return { ...pageData(result?.items ?? [], totals.count, paging), total: r2(totals.total) };
     },
 
     async cancel(customerId, orderId, reason) {
@@ -223,12 +383,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
         for (const shop of order.shop_orders) {
           if (terminalShopStatuses.has(shop.status)) continue;
           for (const item of shop.items) {
-            const released = await sellerProductModel.updateOne(
-              { _id: item.seller_product_id, variants: { $elemMatch: { _id: item.variant_id, reserved_quantity: { $gte: item.quantity } } } },
-              { $inc: { "variants.$.available_quantity": item.quantity, "variants.$.reserved_quantity": -item.quantity } },
-              { session },
-            );
-            if (released.modifiedCount !== 1) fail(409, "Inventory changed during cancellation");
+            await releaseLine(item, session);
           }
           shop.status = "cancelled";
           shop.timeline.push({ status: "cancelled", by: customerId, ...(reason ? { note: reason } : {}) });
@@ -239,7 +394,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
         await paymentModelUpdateExpired(order._id, session);
         if (order.coupon?.coupon_id) await userCouponModel.updateOne({ user_id: customerId, coupon_id: order.coupon.coupon_id, status: "used", order_id: order._id }, { $set: { status: "assigned", reserved_at: null, used_at: null, order_id: null } }, { session });
         await archiveIfTerminal(order, session);
-        return order.toObject();
+        return customerOrderResponse(order.toObject());
       });
     },
 
@@ -251,22 +406,54 @@ export function createOrderService({ rewardService = createRewardService() } = {
         if (!shopOrder || String(shopOrder.seller_id) !== String(sellerId)) fail(404, "Shop order not found");
         const allowed = status === "accepted" ? shopOrder.status === "processing" : status === "packed" ? shopOrder.status === "accepted" : ["processing", "accepted"].includes(shopOrder.status);
         if (!allowed) fail(409, "Shop order cannot transition to this status");
+        if (status === "rejected") {
+          for (const item of shopOrder.items) await releaseLine(item, session);
+        }
         shopOrder.status = status;
         if (status === "rejected") shopOrder.rejection_reason = reason;
         if (status === "packed") shopOrder.pickup_otp = { code: otp(), generated_at: new Date(), attempts: 0 };
         shopOrder.timeline.push({ status, by: sellerId, ...(reason ? { note: reason } : {}) });
         order.status = deriveParentStatus(order);
         await order.save({ session });
+        if (order.status === "cancelled" && order.coupon?.coupon_id) {
+          await userCouponModel.updateOne(
+            { user_id: order.customer_id, coupon_id: order.coupon.coupon_id, status: "used", order_id: order._id },
+            { $set: { status: "assigned", reserved_at: null, used_at: null, order_id: null } },
+            { session },
+          );
+        }
         await archiveIfTerminal(order, session);
-        return order.toObject();
+        return sellerOrderResponse(order.toObject(), sellerId);
       });
     },
 
-    async availableTasks() { return orderModel.find({ "delivery.partner_id": null, "shop_orders.status": "packed" }).select("order_number shop_orders.shop_snapshot shop_orders.items shop_orders.status").lean(); },
-    async myTasks(partnerId) { return orderModel.find({ "delivery.partner_id": partnerId }).sort({ createdAt: -1 }).lean(); },
-    async deliveryEarnings(partnerId) {
-      const rows = await deliveryEarningModel.find({ delivery_partner_id: partnerId }).sort({ createdAt: -1 }).lean();
-      return { items: rows, total: r2(rows.reduce((sum, row) => sum + row.amount, 0)) };
+    async availableTasks(query) {
+      const paging = pagination(query);
+      const filter = { "delivery.partner_id": null, "shop_orders.status": "packed" };
+      const [orders, total] = await Promise.all([
+        orderModel.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.limit).lean(),
+        orderModel.countDocuments(filter),
+      ]);
+      return pageData(orders.map(deliveryOrderResponse), total, paging);
+    },
+    async myTasks(partnerId, query) {
+      const paging = pagination(query);
+      const filter = { "delivery.partner_id": partnerId };
+      const [orders, total] = await Promise.all([
+        orderModel.find(filter).sort({ createdAt: -1 }).skip(paging.skip).limit(paging.limit).lean(),
+        orderModel.countDocuments(filter),
+      ]);
+      return pageData(orders.map(deliveryOrderResponse), total, paging);
+    },
+    async deliveryEarnings(partnerId, query) {
+      const paging = pagination(query);
+      const [result] = await deliveryEarningModel.aggregate([
+        { $match: { delivery_partner_id: new Types.ObjectId(partnerId) } },
+        { $project: { _id: 0, order_id: 1, amount: 1 } },
+        { $facet: { items: [{ $sort: { order_id: -1 } }, { $skip: paging.skip }, { $limit: paging.limit }], totals: [{ $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }] } },
+      ]);
+      const totals = result?.totals?.[0] ?? { total: 0, count: 0 };
+      return { ...pageData(result?.items ?? [], totals.count, paging), total: r2(totals.total) };
     },
 
     async setDeliveryEarning(orderId, earningAmount) {
@@ -276,7 +463,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
         { returnDocument: "after", runValidators: true },
       );
       if (!order) fail(404, "Order not found");
-      return order.toObject();
+      return { order_id: order._id, earning_amount: order.delivery.earning_amount };
     },
 
     async acceptTask(partnerId, orderId) {
@@ -285,7 +472,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
         if (partner.modifiedCount !== 1) fail(409, "Delivery partner is unavailable");
         const order = await orderModel.findOneAndUpdate({ _id: orderId, "delivery.partner_id": null, "shop_orders.status": "packed" }, { $set: { "delivery.partner_id": partnerId, "delivery.assigned_at": new Date() } }, { returnDocument: "after", session });
         if (!order) fail(409, "Delivery task is unavailable");
-        return order.toObject();
+        return deliveryOrderResponse(order.toObject());
       });
     },
 
@@ -299,7 +486,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
         shopOrder.pickup_otp.verified_at = new Date(); shopOrder.status = "out_for_delivery"; shopOrder.timeline.push({ status: "out_for_delivery", by: partnerId });
         order.status = deriveParentStatus(order);
         if (order.status === "out_for_delivery" && !order.delivery.customer_otp?.code) { order.delivery.customer_otp = { code: otp(), generated_at: new Date(), attempts: 0 }; order.payment_enabled_at = new Date(); }
-        await order.save({ session }); return order.toObject();
+        await order.save({ session }); return deliveryOrderResponse(order.toObject());
       });
     },
 
@@ -307,7 +494,7 @@ export function createOrderService({ rewardService = createRewardService() } = {
       const order = await orderModel.findOne({ _id: orderId, "delivery.partner_id": partnerId, status: "out_for_delivery" });
       if (!order?.delivery.customer_otp || order.delivery.customer_otp.attempts >= 5) fail(409, "Customer OTP is unavailable");
       if (order.delivery.customer_otp.code !== code) { order.delivery.customer_otp.attempts += 1; await order.save(); fail(400, "Invalid customer OTP"); }
-      order.delivery.customer_otp.verified_at = new Date(); await order.save(); return order.toObject();
+      order.delivery.customer_otp.verified_at = new Date(); await order.save(); return deliveryOrderResponse(order.toObject());
     },
 
     async completeDelivery(partnerId, orderId) {
@@ -316,12 +503,14 @@ export function createOrderService({ rewardService = createRewardService() } = {
         if (!order?.delivery.customer_otp?.verified_at) fail(409, "Customer OTP and payment are required");
         for (const shop of activeShopOrders(order)) { if (shop.status !== "out_for_delivery") fail(409, "All shop orders must be out for delivery"); shop.status = "delivered"; shop.timeline.push({ status: "delivered", by: partnerId }); }
         order.status = "delivered"; order.delivery.delivered_at = new Date();
+        const reward = await rewardService.awardForOrder(order, { session });
+        if (reward) order.reward_awarded_at = new Date();
         await order.save({ session });
         await deliveryEarningModel.create([{ delivery_partner_id: partnerId, order_id: order._id, amount: order.delivery.earning_amount ?? 0 }], { session });
         await userModel.updateOne({ _id: partnerId, active_orders: { $gt: 0 } }, { $inc: { active_orders: -1 }, $set: { delivery_partner_status: "available" } }, { session });
-        await archiveIfTerminal(order, session); return order.toObject();
+        await archiveIfTerminal(order, session); return deliveryOrderResponse(order.toObject());
       });
-      await rewardService.awardForOrder(delivered); return delivered;
+      return delivered;
     },
   };
 }

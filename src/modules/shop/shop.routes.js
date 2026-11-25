@@ -1,4 +1,7 @@
-import { requireSeller } from "../../shared/http/auth-guards.js";
+import {
+  requireAuthenticated,
+  requireSeller,
+} from "../../shared/http/auth-guards.js";
 import { createShopController } from "./shop.controller.js";
 import {
   createShopSchema,
@@ -6,6 +9,7 @@ import {
   developmentUpdateSchema,
   nearbyShopListSchema,
   sellerShopListSchema,
+  shopDetailQuerySchema,
   shopParamsSchema,
   updateShopSchema,
 } from "./shop.schema.js";
@@ -62,8 +66,16 @@ export default async function shopRoutes(app, { service, isProduction }) {
     controller.listNearby,
   );
   app.get(
-    "/:shop_id",
-    { ...sellerOnly, schema: { params: shopParamsSchema } },
-    controller.getDetail,
+    "/",
+    {
+      onRequest: requireAuthenticated,
+      schema: { querystring: shopDetailQuerySchema },
+    },
+    controller.getDetails,
   );
+  // app.get(
+  //   "/:shop_id",
+  //   { ...sellerOnly, schema: { params: shopParamsSchema } },
+  //   controller.getDetail,
+  // );
 }

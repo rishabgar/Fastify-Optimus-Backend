@@ -34,6 +34,29 @@ export function createProductController(service) {
       });
     },
 
+    async listSummaryByShop(request, reply) {
+      const products = await service.listSummaryByShop(
+        request.params.shop_id,
+        request.query,
+      );
+      return success(reply, {
+        message: "Product summaries fetched successfully",
+        data: products,
+      });
+    },
+
+    async listSummaryByShopAndCategory(request, reply) {
+      const products = await service.listSummaryByShopAndCategory(
+        request.params.shop_id,
+        request.params.product_category_id,
+        request.query,
+      );
+      return success(reply, {
+        message: "Product summaries fetched successfully",
+        data: products,
+      });
+    },
+
     async listNearby(request, reply) {
       const products = await service.listNearby(request.params, request.query);
       return success(reply, {
