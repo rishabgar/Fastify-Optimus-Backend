@@ -94,3 +94,25 @@ In practical terms, it asks for:
 - Treat database values—not client values—as authoritative for stock, pricing, discounts, payable amount, payment state, and seller earnings.
 - Production deployment must use a MongoDB replica set because transactions are required.
   In short: it is not asking for a single endpoint. It is asking for an end-to-end order, fulfilment, payment, inventory, returns, accounting, background-worker, auditing, and test system for a multi-shop marketplace.
+
+## Direct image uploads
+
+Configure `R2_ENDPOINT` (the Cloudflare account S3 endpoint), `R2_BUCKET`,
+`R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` in the deployment environment;
+never commit credentials. `POST /uploads/presigned-url` requires a JWT and a
+JSON body such as `{ "content_type": "image/png" }`. The content type is required; `image/jpeg`, `image/jpg`, and `image/webp`
+are also accepted. The response
+contains `object_path` and `upload_url`. PUT the image bytes to `upload_url`
+within 60 seconds with the exact same `Content-Type` header.
+
+Configure the R2 bucket CORS to allow the client origins, PUT, and the
+`Content-Type` header. Public display requires an R2 public bucket or custom
+domain configured separately. Set `PUBLIC_IMAGE_BASE_URL` to the public delivery base URL. After uploading,
+send `{ "object_path": "individual/<seller-id>/<uuid>.png" }` in the existing
+`product_images` array for an individual seller product, or in
+`product_images_override` for a common seller product. The backend checks the
+path belongs to the authenticated seller and saves its public URL. Existing
+`url` image inputs remain supported. This check does not verify that the object
+exists in R2. A signed
+Content-Type checks the request header, not the actual bytes or file size.
+No image content verification or size limit is enforced by this flow.

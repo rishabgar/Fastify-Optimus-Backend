@@ -13,6 +13,7 @@ import shopModule from "./src/modules/shop/index.js";
 import shopFavouriteModule from "./src/modules/shop-favourite/index.js";
 import shopTypeModule from "./src/modules/shop-type/index.js";
 import userModule from "./src/modules/user/index.js";
+import uploadModule from "./src/modules/upload/index.js";
 import mongoosePlugin from "./src/shared/database/mongoose.js";
 import { registerErrorHandlers } from "./src/shared/http/error-handler.js";
 
@@ -31,6 +32,11 @@ export function buildApp(options = {}) {
   }
 
   app.register(healthModule);
+  app.register(uploadModule, {
+    prefix: "/uploads",
+    jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET,
+    uploadService: options.uploadService,
+  });
   app.register(userModule, {
     jwtSecret: options.jwtSecret ?? process.env.JWT_SECRET,
     userService: options.userService,

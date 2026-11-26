@@ -6,9 +6,10 @@ const objectIdSchema = {
 const imageSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["url"],
+  oneOf: [{ required: ["url"] }, { required: ["object_path"] }],
   properties: {
     url: { type: "string", minLength: 1 },
+    object_path: { type: "string", minLength: 1, maxLength: 200 },
     alt: { type: "string", minLength: 1 },
     is_main: { type: "boolean" },
   },

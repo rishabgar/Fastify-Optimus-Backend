@@ -353,3 +353,26 @@ test("seller product deletion derives ownership and returns no details", async (
     data: null,
   });
 });
+
+
+test("seller product image schema accepts an object path and rejects ambiguous image inputs", async (t) => {
+  let received;
+  const app = buildTestApp({
+    async createSellerProduct(input) { received = input; return {}; },
+  });
+  t.after(() => app.close());
+  const token = await sellerToken(app);
+  const headers = { authorization: `Bearer ${token}` };
+  const objectPath = `individual/${sellerId}/12345678-1234-4234-8234-123456789abc.png`;
+  const response = await app.inject({
+    method: "POST", url: "/product/seller/create", headers,
+    payload: { ...commonPayload(), product_images_override: [{ object_path: objectPath }] },
+  });
+  assert.equal(response.statusCode, 201);
+  assert.equal(received.product_images_override[0].object_path, objectPath);
+  const ambiguous = await app.inject({
+    method: "POST", url: "/product/seller/create", headers,
+    payload: { ...commonPayload(), product_images_override: [{ object_path: objectPath, url: "https://example.com/image.png" }] },
+  });
+  assert.equal(ambiguous.statusCode, 400);
+});

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../../shared/http/http-error.js";
+import { resolveSellerProductImages } from "./seller-product-images.js";
 import { sellerProductRepository } from "./seller-product.repository.js";
 
 const NORMALIZERS = {
@@ -148,10 +149,15 @@ export function createSellerProductService({
         throw fieldError(409, "Shop is inactive", "shop_id");
       }
 
+      const imageField = input.product_type === "common" ? "product_images_override" : "product_images";
+      const preparedInput = input[imageField] === undefined ? input : {
+        ...input,
+        [imageField]: resolveSellerProductImages(input[imageField], sellerId),
+      };
       try {
-        return input.product_type === "common"
-          ? await createCommon(input, sellerId)
-          : await createIndividual(input, sellerId, shop);
+        return preparedInput.product_type === "common"
+          ? await createCommon(preparedInput, sellerId)
+          : await createIndividual(preparedInput, sellerId, shop);
       } catch (error) {
         if (isCommonProductConflict(error)) {
           throw fieldError(

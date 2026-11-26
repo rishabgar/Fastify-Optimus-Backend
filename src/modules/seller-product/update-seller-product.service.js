@@ -1,4 +1,5 @@
 import { HttpError } from "../../shared/http/http-error.js";
+import { resolveSellerProductImages } from "./seller-product-images.js";
 import { sellerProductRepository } from "./seller-product.repository.js";
 
 const NORMALIZERS = {
@@ -203,6 +204,10 @@ export function createUpdateSellerProductService({
       const unset = {};
       const arrayFilters = [];
       addTopLevelUpdates(input, allowedFields, set, unset);
+      const imageField = commonProduct ? "product_images_override" : "product_images";
+      if (input[imageField] !== undefined && input[imageField] !== null) {
+        set[imageField] = resolveSellerProductImages(input[imageField], sellerId);
+      }
 
       let activeMasterVariantIds = new Set();
       if (commonProduct && input.variants) {
